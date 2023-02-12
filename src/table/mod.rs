@@ -1,0 +1,92 @@
+use std::marker::PhantomData;
+
+use ff::{Field, PrimeField};
+use halo2_proofs::{
+    circuit::{Layouter, Value},
+    plonk::{ConstraintSystem, Error, TableColumn},
+};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::str::FromStr;
+
+fn read_2d_array<T>(file_path: &str) -> Vec<Vec<T>>
+where
+    T: FromStr,
+    <T as FromStr>::Err: std::fmt::Debug,
+{
+    let file = File::open(file_path).unwrap();
+    let reader = BufReader::new(file);
+    let mut array = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.unwrap();
+        let elements: Vec<T> = line
+            .split_whitespace()
+            .map(|s| s.parse().unwrap())
+            .collect();
+        array.push(elements);
+    }
+
+    array
+}
+
+struct Sizes {
+    RANGE: usize,
+    NUM_BITS: usize,
+    LOOKUP_RANGE: usize,
+}
+
+/// A lookup table of values from 0..RANGE.
+#[derive(Debug, Clone)]
+pub(super) struct TransitionTableConfig<F: PrimeField, const RANGE: usize> {
+    pub(super) prev_state: TableColumn,
+    pub(super) next_state: TableColumn,
+    pub(super) character: TableColumn,
+    _marker: PhantomData<F>,
+}
+
+impl<F: PrimeField, const RANGE: usize> TransitionTableConfig<F, RANGE> {
+    pub(super) fn configure(meta: &mut ConstraintSystem<F>) -> Self {
+        let prev_state = meta.lookup_table_column();
+        let next_state = meta.lookup_table_column();
+        let character = meta.lookup_table_column();
+
+        Self {
+            prev_state,
+            next_state,
+            character,
+            _marker: PhantomData,
+        }
+    }
+
+    pub(super) fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+        layouter.assign_table(
+            || "load transition table",
+            |mut table| {
+                let array = read_2d_array::<i32>("halo2_regex_lookup.txt");
+                const offset = 0;
+                for row in array {
+                    table.assign_cell(
+                        || "prev_state",
+                        self.prev_state,
+                        offset,
+                        || Value::known(F::from_u128(row[0] as u128)),
+                    )?;
+                    table.assign_cell(
+                        || "next_state",
+                        self.next_state,
+                        offset,
+                        || Value::known(F::from_u128(row[1] as u128)),
+                    )?;
+                    table.assign_cell(
+                        || "character",
+                        self.character,
+                        offset,
+                        || Value::known(F::from_u128(row[2] as u128)),
+                    )?;
+                }
+                Ok(())
+            },
+        )
+    }
+}
