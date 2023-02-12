@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
 
-fn read_2d_array<T>(file_path: &str) -> Vec<Vec<T>>
+pub(super) fn read_2d_array<T>(file_path: &str) -> Vec<Vec<T>>
 where
     T: FromStr,
     <T as FromStr>::Err: std::fmt::Debug,
@@ -38,14 +38,14 @@ struct Sizes {
 
 /// A lookup table of values from 0..RANGE.
 #[derive(Debug, Clone)]
-pub(super) struct TransitionTableConfig<F: PrimeField, const RANGE: usize> {
+pub(super) struct TransitionTableConfig<F: PrimeField> {
     pub(super) prev_state: TableColumn,
     pub(super) next_state: TableColumn,
     pub(super) character: TableColumn,
     _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField, const RANGE: usize> TransitionTableConfig<F, RANGE> {
+impl<F: PrimeField> TransitionTableConfig<F> {
     pub(super) fn configure(meta: &mut ConstraintSystem<F>) -> Self {
         let prev_state = meta.lookup_table_column();
         let next_state = meta.lookup_table_column();
@@ -63,9 +63,13 @@ impl<F: PrimeField, const RANGE: usize> TransitionTableConfig<F, RANGE> {
         layouter.assign_table(
             || "load transition table",
             |mut table| {
-                let array = read_2d_array::<i32>("halo2_regex_lookup.txt");
-                const offset = 0;
+                let mut array = read_2d_array::<i32>("./src/halo2_regex_lookup_body.txt");
+                // Append [0, 0, 0] to array
+                array.push(vec![0, 0, 0]);
+                print!("Array: {:?}", array);
+                let mut offset = 0;
                 for row in array {
+                    print!("Row: {:?} {:?}", row, offset);
                     table.assign_cell(
                         || "prev_state",
                         self.prev_state,
@@ -84,6 +88,7 @@ impl<F: PrimeField, const RANGE: usize> TransitionTableConfig<F, RANGE> {
                         offset,
                         || Value::known(F::from_u128(row[2] as u128)),
                     )?;
+                    offset += 1;
                 }
                 Ok(())
             },

@@ -3,16 +3,16 @@ use halo2_proofs::{
     circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
     plonk::{
         Advice, Assigned, Circuit, Column, ConstraintSystem, Constraints, Error, Expression,
-        Selector,
+        Instance, Selector,
     },
     poly::Rotation,
 };
 use std::marker::PhantomData;
 
-use crate::table::RangeTableConfig;
+use crate::table::TransitionTableConfig;
 
 // Checks a regex of string len
-const STRING_LEN: usize = 8;
+const STRING_LEN: usize = 22;
 
 #[derive(Debug, Clone)]
 struct RangeConstrained<F: PrimeField>(AssignedCell<F, F>);
@@ -21,18 +21,19 @@ struct RangeConstrained<F: PrimeField>(AssignedCell<F, F>);
 
 #[derive(Debug, Clone)]
 struct RegexCheckConfig<F: PrimeField> {
-    characters: Column<Instance>,
+    characters: Column<Advice>,
+    // characters_advice: Column<Instance>,
     state: Column<Advice>,
-    transition_table: TransitionTable<F>,
-    q_lookup_state_selector: Column<Selector>,
+    transition_table: TransitionTableConfig<F>,
+    q_lookup_state_selector: Selector,
     _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField> RegexCheckConfig<F> {
     pub fn configure(meta: &mut ConstraintSystem<F>) -> Self {
-        let characters = meta.instance_column();
+        let characters = meta.advice_column();
         let state = meta.advice_column();
-        let q_lookup_state_selector = meta.selector_column();
+        let q_lookup_state_selector = meta.complex_selector();
         let transition_table = TransitionTableConfig::configure(meta);
 
         // Lookup each transition value individually, not paying attention to bit count
@@ -40,23 +41,30 @@ impl<F: PrimeField> RegexCheckConfig<F> {
             let q = meta.query_selector(q_lookup_state_selector);
             let prev_state = meta.query_advice(state, Rotation::cur());
             let next_state = meta.query_advice(state, Rotation::next());
-            let character = meta.query_advice(character, Rotation::cur());
+            let character = meta.query_advice(characters, Rotation::cur());
 
-            let one_minus_q = Expression::Constant(F::one()) - q.clone();
-            let negative_1 = Expression::Constant(F::from_u64(-1));
+            // One minus q
+            let one_minus_q = Expression::Constant(F::from(1)) - q.clone();
+            let zero = Expression::Constant(F::from(0));
+
+            /*
+                | q | state | characters | table.prev_state | table.next_state  | table.character
+                | 1 | s_cur |    char    |       s_cur      |     s_next        |     char
+                |   | s_next|
+            */
 
             vec![
                 (
-                    q.clone() * prev_state + one_minus_q.clone() * Expression::Constant(negative_1),
-                    table.prev_state,
+                    q.clone() * prev_state + one_minus_q.clone() * zero.clone(),
+                    transition_table.prev_state,
                 ),
                 (
-                    q.clone() * next_state + one_minus_q.clone() * Expression::Constant(negative_1),
-                    table.next_state,
+                    q.clone() * next_state + one_minus_q.clone() * zero.clone(),
+                    transition_table.next_state,
                 ),
                 (
-                    q.clone() * character + one_minus_q.clone() * Expression::Constant(negative_1),
-                    table.character,
+                    q.clone() * character + one_minus_q.clone() * zero.clone(),
+                    transition_table.character,
                 ),
             ]
         });
@@ -74,27 +82,30 @@ impl<F: PrimeField> RegexCheckConfig<F> {
     pub fn assign_values(
         &self,
         mut layouter: impl Layouter<F>,
-        characters: str,
-        states: [F; STRING_LEN],
+        characters: Vec<u128>,
+        states: Vec<u128>,
     ) -> Result<bool, Error> {
         layouter.assign_region(
             || "Assign values",
             |mut region| {
-                let offset = 0;
+                // let offset = 0;
 
                 // Enable q_decomposed
                 for i in 0..STRING_LEN {
+                    println!("{:?}, {:?}", characters[i], states[i]);
                     // offset = i;
-                    self.q_lookup_state_selector.enable(&mut region, i)?;
+                    if i < STRING_LEN - 1 {
+                        self.q_lookup_state_selector.enable(&mut region, i)?;
+                    }
                     region.assign_advice(
-                        || format!("character", i),
-                        characters[i],
+                        || format!("character"),
+                        self.characters,
                         i,
                         || Value::known(F::from_u128(characters[i])),
                     )?;
                     region.assign_advice(
-                        || format!("state", i),
-                        states[i],
+                        || format!("state"),
+                        self.state,
                         i,
                         || Value::known(F::from_u128(states[i])),
                     )?;
@@ -107,8 +118,8 @@ impl<F: PrimeField> RegexCheckConfig<F> {
 #[derive(Default, Clone)]
 struct RegexCheckCircuit<F: PrimeField> {
     // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
-    pub characters: str,
-    pub states: [u128; STRING_LEN],
+    pub characters: Vec<u128>,
+    pub states: Vec<u128>,
     _marker: PhantomData<F>,
 }
 
@@ -119,8 +130,8 @@ impl<F: PrimeField> Circuit<F> for RegexCheckCircuit<F> {
     // Circuit without witnesses, called only during key generation
     fn without_witnesses(&self) -> Self {
         Self {
-            characters: "",
-            states: [0 as u128; STRING_LEN],
+            characters: vec![],
+            states: vec![],
             _marker: PhantomData,
         }
     }
@@ -135,12 +146,12 @@ impl<F: PrimeField> Circuit<F> for RegexCheckCircuit<F> {
         config: Self::Config,
         mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
-        config.table.load(&mut layouter)?;
+        config.transition_table.load(&mut layouter)?;
         print!("Synthesize being called...");
         let mut value = config.assign_values(
             layouter.namespace(|| "Assign all values"),
-            self.characters,
-            self.states,
+            self.characters.clone(),
+            self.states.clone(),
         );
         Ok(())
     }
@@ -158,28 +169,51 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_range_check_pass() {
-        let k = 10; // 8, 128, etc
+    fn test_regex_pass() {
+        let k = 7; // 8, 128, etc
+
+        // Convert query string to u128s
+        let characters: Vec<u128> = "email was meant for @y"
+            .chars()
+            .map(|c| c as u32 as u128)
+            .collect();
+
+        // Make a vector of the numbers 1...24
+        let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        assert_eq!(characters.len(), STRING_LEN);
+        assert_eq!(states.len(), STRING_LEN);
 
         // Successful cases
-        for i in 0..RANGE {
-            let i = 0;
-            let circuit = RegexCheckCircuit::<Fp> {
-                value: i as u128,
-                _marker: PhantomData,
-            };
+        let circuit = RegexCheckCircuit::<Fp> {
+            characters,
+            states,
+            _marker: PhantomData,
+        };
 
-            let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-            prover.assert_satisfied();
-        }
+        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        prover.assert_satisfied();
     }
 
     #[test]
-    fn test_range_check_fail() {
+    fn test_regex_fail() {
         let k = 10;
+
+        // Convert query string to u128s
+        let characters: Vec<u128> = "email isnt meant for u"
+            .chars()
+            .map(|c| c as u32 as u128)
+            .collect();
+
+        // Make a vector of the numbers 1...24
+        let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+
+        assert_eq!(characters.len(), STRING_LEN);
+        assert_eq!(states.len(), STRING_LEN);
+
         // Out-of-range `value = 8`
         let circuit = RegexCheckCircuit::<Fp> {
-            value: RANGE as u128,
+            characters: characters,
+            states: states,
             _marker: PhantomData,
         };
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();

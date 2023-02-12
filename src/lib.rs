@@ -1,1 +1,2 @@
-mod table;
+mod regex;
+pub mod table;
