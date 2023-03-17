@@ -1,5 +1,5 @@
 use halo2_base::halo2_proofs::{
-    circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
+    circuit::{AssignedCell, Layouter, Region, SimpleFloorPlanner, Value},
     plonk::{
         Advice, Assigned, Circuit, Column, ConstraintSystem, Constraints, Error, Expression,
         Instance, Selector,
@@ -21,15 +21,16 @@ const STRING_LEN: usize = 22;
 #[derive(Debug, Clone)]
 struct RangeConstrained<F: PrimeField>(AssignedCell<F, F>);
 
-pub struct AssignedRegexResult<'a, F: PrimeField> {
-    characters: Vec<AssignedValue<'a, F>>,
-    state: Vec<AssignedValue<'a, F>>,
+#[derive(Debug, Clone)]
+pub struct AssignedRegexResult<F: PrimeField> {
+    pub characters: Vec<AssignedCell<F, F>>,
+    pub states: Vec<AssignedCell<F, F>>,
 }
 
 // Here we decompose a transition into 3-value lookups.
 
 #[derive(Debug, Clone)]
-struct RegexCheckConfig<F: PrimeField> {
+pub struct RegexCheckConfig<F: PrimeField> {
     characters: Column<Advice>,
     // characters_advice: Column<Instance>,
     state: Column<Advice>,
@@ -90,45 +91,75 @@ impl<F: PrimeField> RegexCheckConfig<F> {
     // Note that the two types of region.assign_advice calls happen together so that it is the same region
     pub fn assign_values(
         &self,
-        mut layouter: impl Layouter<F>,
-        characters: Vec<u128>,
-        states: Vec<u128>,
-    ) -> Result<bool, Error> {
-        layouter.assign_region(
-            || "Assign values",
-            |mut region| {
-                // let offset = 0;
+        region: &mut Region<F>,
+        characters: &[u8],
+        states: &[u64],
+    ) -> Result<AssignedRegexResult<F>, Error> {
+        let mut assigned_characters = Vec::new();
+        let mut assigned_states = Vec::new();
+        // layouter.assign_region(
+        //     || "Assign values",
+        //     |mut region| {
+        //         // let offset = 0;
 
-                // Enable q_decomposed
-                for i in 0..STRING_LEN {
-                    println!("{:?}, {:?}", characters[i], states[i]);
-                    // offset = i;
-                    if i < STRING_LEN - 1 {
-                        self.q_lookup_state_selector.enable(&mut region, i)?;
-                    }
-                    region.assign_advice(
-                        || format!("character"),
-                        self.characters,
-                        i,
-                        || Value::known(F::from_u128(characters[i])),
-                    )?;
-                    region.assign_advice(
-                        || format!("state"),
-                        self.state,
-                        i,
-                        || Value::known(F::from_u128(states[i])),
-                    )?;
-                }
-                Ok(true)
-            },
-        )
+        //         // Enable q_decomposed
+        //         for i in 0..STRING_LEN {
+        //             println!("{:?}, {:?}", characters[i], states[i]);
+        //             // offset = i;
+        //             if i < STRING_LEN - 1 {
+        //                 self.q_lookup_state_selector.enable(&mut region, i)?;
+        //             }
+        //             let assigned_c = region.assign_advice(
+        //                 || format!("character"),
+        //                 self.characters,
+        //                 i,
+        //                 || Value::known(F::from(characters[i] as u64)),
+        //             )?;
+        //             assigned_characters.push(assigned_c);
+        //             let assigned_s = region.assign_advice(
+        //                 || format!("state"),
+        //                 self.state,
+        //                 i,
+        //                 || Value::known(F::from_u128(states[i])),
+        //             )?;
+        //             assigned_states.push(assigned_s);
+        //         }
+        //         Ok(())
+        //     },
+        // )?;
+        // Enable q_decomposed
+        for i in 0..STRING_LEN {
+            println!("{:?}, {:?}", characters[i], states[i]);
+            // offset = i;
+            if i < STRING_LEN - 1 {
+                self.q_lookup_state_selector.enable(region, i)?;
+            }
+            let assigned_c = region.assign_advice(
+                || format!("character"),
+                self.characters,
+                i,
+                || Value::known(F::from(characters[i] as u64)),
+            )?;
+            assigned_characters.push(assigned_c);
+            let assigned_s = region.assign_advice(
+                || format!("state"),
+                self.state,
+                i,
+                || Value::known(F::from(states[i])),
+            )?;
+            assigned_states.push(assigned_s);
+        }
+        Ok(AssignedRegexResult {
+            characters: assigned_characters,
+            states: assigned_states,
+        })
     }
 }
 #[derive(Default, Clone)]
 struct RegexCheckCircuit<F: PrimeField> {
     // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
-    pub characters: Vec<u128>,
-    pub states: Vec<u128>,
+    pub characters: Vec<u8>,
+    pub states: Vec<u64>,
     _marker: PhantomData<F>,
 }
 
@@ -157,10 +188,12 @@ impl<F: PrimeField> Circuit<F> for RegexCheckCircuit<F> {
     ) -> Result<(), Error> {
         config.transition_table.load(&mut layouter)?;
         print!("Synthesize being called...");
-        let mut value = config.assign_values(
-            layouter.namespace(|| "Assign all values"),
-            self.characters.clone(),
-            self.states.clone(),
+        layouter.assign_region(
+            || "regex",
+            |mut region| {
+                config.assign_values(&mut region, &self.characters, &self.states)?;
+                Ok(())
+            },
         );
         Ok(())
     }
@@ -182,13 +215,10 @@ mod tests {
         let k = 7; // 8, 128, etc
 
         // Convert query string to u128s
-        let characters: Vec<u128> = "email was meant for @y"
-            .chars()
-            .map(|c| c as u32 as u128)
-            .collect();
+        let characters: Vec<u8> = "email was meant for @y".chars().map(|c| c as u8).collect();
 
         // Make a vector of the numbers 1...24
-        let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        let states = (1..=STRING_LEN as u64).collect::<Vec<u64>>();
         assert_eq!(characters.len(), STRING_LEN);
         assert_eq!(states.len(), STRING_LEN);
 
@@ -208,13 +238,10 @@ mod tests {
         let k = 10;
 
         // Convert query string to u128s
-        let characters: Vec<u128> = "email isnt meant for u"
-            .chars()
-            .map(|c| c as u32 as u128)
-            .collect();
+        let characters: Vec<u8> = "email isnt meant for u".chars().map(|c| c as u8).collect();
 
         // Make a vector of the numbers 1...24
-        let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        let states = (1..=STRING_LEN as u64).collect::<Vec<u64>>();
 
         assert_eq!(characters.len(), STRING_LEN);
         assert_eq!(states.len(), STRING_LEN);
