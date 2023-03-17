@@ -9,27 +9,6 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
 
-pub(super) fn read_2d_array<T>(file_path: &str) -> Vec<Vec<T>>
-where
-    T: FromStr,
-    <T as FromStr>::Err: std::fmt::Debug,
-{
-    let file = File::open(file_path).unwrap();
-    let reader = BufReader::new(file);
-    let mut array = Vec::new();
-
-    for line in reader.lines() {
-        let line = line.unwrap();
-        let elements: Vec<T> = line
-            .split_whitespace()
-            .map(|s| s.parse().unwrap())
-            .collect();
-        array.push(elements);
-    }
-
-    array
-}
-
 struct Sizes {
     RANGE: usize,
     NUM_BITS: usize,
@@ -46,6 +25,27 @@ pub(super) struct TransitionTableConfig<F: PrimeField> {
 }
 
 impl<F: PrimeField> TransitionTableConfig<F> {
+    pub(super) fn read_2d_array<T>(&self, file_path: &str) -> Vec<Vec<T>>
+    where
+        T: FromStr,
+        <T as FromStr>::Err: std::fmt::Debug,
+    {
+        let file = File::open(file_path).unwrap();
+        let reader = BufReader::new(file);
+        let mut array = Vec::new();
+
+        for line in reader.lines() {
+            let line = line.unwrap();
+            let elements: Vec<T> = line
+                .split_whitespace()
+                .map(|s| s.parse().unwrap())
+                .collect();
+            array.push(elements);
+        }
+
+        array
+    }
+
     pub(super) fn configure(meta: &mut ConstraintSystem<F>) -> Self {
         let prev_state = meta.lookup_table_column();
         let next_state = meta.lookup_table_column();
@@ -63,10 +63,10 @@ impl<F: PrimeField> TransitionTableConfig<F> {
         layouter.assign_table(
             || "load transition table",
             |mut table| {
-                let mut array = read_2d_array::<i32>("./src/halo2_regex_lookup_body.txt");
+                let mut array = self.read_2d_array::<i32>("./src/halo2_regex_lookup_body.txt");
                 // Append [0, 0, 0] to array
                 array.push(vec![0, 0, 0]);
-                print!("Array: {:?}", array);
+                // print!("Array: {:?}", array);
                 let mut offset = 0;
                 for row in array {
                     print!("Row: {:?} {:?}", row, offset);

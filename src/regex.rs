@@ -1,4 +1,5 @@
 use ff::{Field, PrimeField};
+// use halo2::halo2curves::bn256::G1Affine;
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
     plonk::{
@@ -35,6 +36,8 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         let state = meta.advice_column();
         let q_lookup_state_selector = meta.complex_selector();
         let transition_table = TransitionTableConfig::configure(meta);
+
+        meta.enable_equality(characters);
 
         // Lookup each transition value individually, not paying attention to bit count
         meta.lookup(|meta| {
@@ -115,11 +118,11 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         )
     }
 }
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 struct RegexCheckCircuit<F: PrimeField> {
     // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
     pub characters: Vec<u128>,
-    pub states: Vec<u128>,
+    // pub states: Vec<u128>,
     _marker: PhantomData<F>,
 }
 
@@ -131,7 +134,7 @@ impl<F: PrimeField> Circuit<F> for RegexCheckCircuit<F> {
     fn without_witnesses(&self) -> Self {
         Self {
             characters: vec![],
-            states: vec![],
+            // states: vec![],
             _marker: PhantomData,
         }
     }
@@ -147,11 +150,38 @@ impl<F: PrimeField> Circuit<F> for RegexCheckCircuit<F> {
         mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
         config.transition_table.load(&mut layouter)?;
+        // Generate states for given characters
+
+        // Construct transition table
+        let mut array: Vec<Vec<i32>> = config
+            .transition_table
+            .read_2d_array::<i32>("./src/halo2_regex_lookup_body.txt");
+
+        // Starting state is 1 always
+        const START_STATE: u128 = 1;
+        let mut states = vec![START_STATE; STRING_LEN];
+
+        states[0] = START_STATE;
+        let mut next_state = START_STATE;
+
+        // Set the states to transition via the character and state that appear in the array, to the third value in each array tuple
+        for i in 0..STRING_LEN {
+            let character = self.characters[i];
+            states[i] = next_state;
+            let state = states[i];
+            next_state = START_STATE; // Default to start state if no match found
+            for j in 0..array.len() {
+                if array[j][2] == character as i32 && array[j][0] == state as i32 {
+                    next_state = array[j][1] as u128;
+                }
+            }
+        }
+
         print!("Synthesize being called...");
         let mut value = config.assign_values(
             layouter.namespace(|| "Assign all values"),
             self.characters.clone(),
-            self.states.clone(),
+            states.clone(),
         );
         Ok(())
     }
@@ -161,8 +191,8 @@ impl<F: PrimeField> Circuit<F> for RegexCheckCircuit<F> {
 mod tests {
     use halo2_proofs::{
         circuit::floor_planner::V1,
-        dev::{FailureLocation, MockProver, VerifyFailure},
-        pasta::Fp,
+        dev::{CircuitCost, FailureLocation, MockProver, VerifyFailure},
+        pasta::{Eq, Fp},
         plonk::{Any, Circuit},
     };
 
@@ -179,19 +209,26 @@ mod tests {
             .collect();
 
         // Make a vector of the numbers 1...24
-        let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
         assert_eq!(characters.len(), STRING_LEN);
-        assert_eq!(states.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
 
         // Successful cases
         let circuit = RegexCheckCircuit::<Fp> {
             characters,
-            states,
             _marker: PhantomData,
         };
 
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
         prover.assert_satisfied();
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure(
+                (k as u128).try_into().unwrap(),
+                &circuit
+            )
+        );
     }
 
     #[test]
@@ -204,16 +241,12 @@ mod tests {
             .map(|c| c as u32 as u128)
             .collect();
 
-        // Make a vector of the numbers 1...24
-        let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
-
         assert_eq!(characters.len(), STRING_LEN);
-        assert_eq!(states.len(), STRING_LEN);
 
         // Out-of-range `value = 8`
         let circuit = RegexCheckCircuit::<Fp> {
             characters: characters,
-            states: states,
+            // states: states,
             _marker: PhantomData,
         };
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
