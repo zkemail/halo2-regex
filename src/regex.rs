@@ -1,11 +1,15 @@
-use ff::{Field, PrimeField};
-use halo2_proofs::{
+use halo2_base::halo2_proofs::{
     circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
     plonk::{
         Advice, Assigned, Circuit, Column, ConstraintSystem, Constraints, Error, Expression,
         Instance, Selector,
     },
     poly::Rotation,
+};
+use halo2_base::{
+    gates::{flex_gate::FlexGateConfig, range::RangeConfig, GateInstructions, RangeInstructions},
+    utils::{bigint_to_fe, biguint_to_fe, fe_to_biguint, modulus, PrimeField},
+    AssignedValue, Context, QuantumCell,
 };
 use std::marker::PhantomData;
 
@@ -16,6 +20,11 @@ const STRING_LEN: usize = 22;
 
 #[derive(Debug, Clone)]
 struct RangeConstrained<F: PrimeField>(AssignedCell<F, F>);
+
+pub struct AssignedRegexResult<'a, F: PrimeField> {
+    characters: Vec<AssignedValue<'a, F>>,
+    state: Vec<AssignedValue<'a, F>>,
+}
 
 // Here we decompose a transition into 3-value lookups.
 
@@ -37,7 +46,7 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         let transition_table = TransitionTableConfig::configure(meta);
 
         // Lookup each transition value individually, not paying attention to bit count
-        meta.lookup(|meta| {
+        meta.lookup("lookup characters and their state", |meta| {
             let q = meta.query_selector(q_lookup_state_selector);
             let prev_state = meta.query_advice(state, Rotation::cur());
             let next_state = meta.query_advice(state, Rotation::next());
@@ -159,10 +168,10 @@ impl<F: PrimeField> Circuit<F> for RegexCheckCircuit<F> {
 
 #[cfg(test)]
 mod tests {
-    use halo2_proofs::{
+    use halo2_base::halo2_proofs::{
         circuit::floor_planner::V1,
         dev::{FailureLocation, MockProver, VerifyFailure},
-        pasta::Fp,
+        halo2curves::bn256::Fr,
         plonk::{Any, Circuit},
     };
 
@@ -184,7 +193,7 @@ mod tests {
         assert_eq!(states.len(), STRING_LEN);
 
         // Successful cases
-        let circuit = RegexCheckCircuit::<Fp> {
+        let circuit = RegexCheckCircuit::<Fr> {
             characters,
             states,
             _marker: PhantomData,
@@ -211,7 +220,7 @@ mod tests {
         assert_eq!(states.len(), STRING_LEN);
 
         // Out-of-range `value = 8`
-        let circuit = RegexCheckCircuit::<Fp> {
+        let circuit = RegexCheckCircuit::<Fr> {
             characters: characters,
             states: states,
             _marker: PhantomData,

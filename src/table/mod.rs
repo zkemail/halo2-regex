@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
-use ff::{Field, PrimeField};
-use halo2_proofs::{
+use halo2_base::halo2_proofs::{
     circuit::{Layouter, Value},
     plonk::{ConstraintSystem, Error, TableColumn},
 };
+use halo2_base::utils::PrimeField;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
