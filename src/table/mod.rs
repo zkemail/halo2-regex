@@ -38,18 +38,15 @@ impl<F: PrimeField> TransitionTableConfig<F> {
         }
     }
 
-    pub fn load(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        lookup_filepath: &str,
-    ) -> Result<(), Error> {
+    pub fn load(&self, layouter: &mut impl Layouter<F>, lookups: &[&[u64]]) -> Result<(), Error> {
         layouter.assign_table(
             || "load transition table",
             |mut table| {
-                let mut array = read_2d_array::<u64>(lookup_filepath);
+                let mut array = lookups.to_vec();
                 // Append [0, 0, 0] to array
-                array.push(vec![0, 0, 0]);
-                print!("Array: {:?}", array);
+                let dummy_lookup = vec![0, 0, 0];
+                array.push(&dummy_lookup);
+                // print!("Array: {:?}", array);
                 let mut offset = 0;
                 for row in array {
                     print!("Row: {:?} {:?}", row, offset);
@@ -79,7 +76,7 @@ impl<F: PrimeField> TransitionTableConfig<F> {
     }
 }
 
-fn read_2d_array<T>(file_path: &str) -> Vec<Vec<T>>
+pub fn read_2d_array<T>(file_path: &str) -> Vec<Vec<T>>
 where
     T: FromStr,
     <T as FromStr>::Err: std::fmt::Debug,

@@ -55,12 +55,13 @@ impl<'a, F: PrimeField> SubstrMatchConfig<'a, F> {
         ctx: &mut Context<'v, F>,
         characters: &[u8],
         states: &[u64],
+        max_chars_size: usize,
     ) -> Result<(), Error> {
         debug_assert_eq!(characters.len(), states.len());
         debug_assert_eq!(self.assigned_characters.len(), 0);
-        let regex_result = self
-            .regex_config
-            .assign_values(&mut ctx.region, characters, states)?;
+        let regex_result =
+            self.regex_config
+                .assign_values(&mut ctx.region, characters, states, max_chars_size)?;
         let mut assigned_characters = Vec::new();
         let mut assigned_states = Vec::new();
         let mut assigned_indexes = Vec::new();
