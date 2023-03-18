@@ -13,10 +13,7 @@ use halo2_base::{
 };
 use std::marker::PhantomData;
 
-use crate::table::TransitionTableConfig;
-
-// Checks a regex of string len
-const STRING_LEN: usize = 22;
+pub use crate::table::TransitionTableConfig;
 
 #[derive(Debug, Clone)]
 struct RangeConstrained<F: PrimeField>(AssignedCell<F, F>);
@@ -88,6 +85,14 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         }
     }
 
+    pub fn load(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        lookup_filepath: &str,
+    ) -> Result<(), Error> {
+        self.transition_table.load(layouter, lookup_filepath)
+    }
+
     // Note that the two types of region.assign_advice calls happen together so that it is the same region
     pub fn assign_values(
         &self,
@@ -97,6 +102,7 @@ impl<F: PrimeField> RegexCheckConfig<F> {
     ) -> Result<AssignedRegexResult<F>, Error> {
         let mut assigned_characters = Vec::new();
         let mut assigned_states = Vec::new();
+        debug_assert_eq!(characters.len(), states.len());
         // layouter.assign_region(
         //     || "Assign values",
         //     |mut region| {
@@ -155,49 +161,6 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         })
     }
 }
-#[derive(Default, Clone)]
-struct RegexCheckCircuit<F: PrimeField> {
-    // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
-    pub characters: Vec<u8>,
-    pub states: Vec<u64>,
-    _marker: PhantomData<F>,
-}
-
-impl<F: PrimeField> Circuit<F> for RegexCheckCircuit<F> {
-    type Config = RegexCheckConfig<F>;
-    type FloorPlanner = SimpleFloorPlanner;
-
-    // Circuit without witnesses, called only during key generation
-    fn without_witnesses(&self) -> Self {
-        Self {
-            characters: vec![],
-            states: vec![],
-            _marker: PhantomData,
-        }
-    }
-
-    fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        let config = RegexCheckConfig::configure(meta);
-        config
-    }
-
-    fn synthesize(
-        &self,
-        config: Self::Config,
-        mut layouter: impl Layouter<F>,
-    ) -> Result<(), Error> {
-        config.transition_table.load(&mut layouter)?;
-        print!("Synthesize being called...");
-        layouter.assign_region(
-            || "regex",
-            |mut region| {
-                config.assign_values(&mut region, &self.characters, &self.states)?;
-                Ok(())
-            },
-        );
-        Ok(())
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -209,6 +172,54 @@ mod tests {
     };
 
     use super::*;
+
+    // Checks a regex of string len
+    const STRING_LEN: usize = 22;
+
+    #[derive(Default, Clone)]
+    struct TestRegexCheckCircuit<F: PrimeField> {
+        // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
+        pub characters: Vec<u8>,
+        pub states: Vec<u64>,
+        _marker: PhantomData<F>,
+    }
+
+    impl<F: PrimeField> Circuit<F> for TestRegexCheckCircuit<F> {
+        type Config = RegexCheckConfig<F>;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        // Circuit without witnesses, called only during key generation
+        fn without_witnesses(&self) -> Self {
+            Self {
+                characters: vec![],
+                states: vec![],
+                _marker: PhantomData,
+            }
+        }
+
+        fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+            let config = RegexCheckConfig::configure(meta);
+            config
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<F>,
+        ) -> Result<(), Error> {
+            // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+"
+            config.load(&mut layouter, "./test_regexes/regex_test_lookup.txt")?;
+            print!("Synthesize being called...");
+            layouter.assign_region(
+                || "regex",
+                |mut region| {
+                    config.assign_values(&mut region, &self.characters, &self.states)?;
+                    Ok(())
+                },
+            )?;
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_regex_pass() {
@@ -223,7 +234,7 @@ mod tests {
         assert_eq!(states.len(), STRING_LEN);
 
         // Successful cases
-        let circuit = RegexCheckCircuit::<Fr> {
+        let circuit = TestRegexCheckCircuit::<Fr> {
             characters,
             states,
             _marker: PhantomData,
@@ -247,7 +258,7 @@ mod tests {
         assert_eq!(states.len(), STRING_LEN);
 
         // Out-of-range `value = 8`
-        let circuit = RegexCheckCircuit::<Fr> {
+        let circuit = TestRegexCheckCircuit::<Fr> {
             characters: characters,
             states: states,
             _marker: PhantomData,

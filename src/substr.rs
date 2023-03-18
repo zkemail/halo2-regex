@@ -178,3 +178,8 @@ impl<'a, F: PrimeField> SubstrMatchConfig<'a, F> {
         Ok(assigned_value)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+}
