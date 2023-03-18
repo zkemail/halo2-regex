@@ -39,7 +39,7 @@ pub struct RegexCheckConfig<F: PrimeField> {
 }
 
 impl<F: PrimeField> RegexCheckConfig<F> {
-    const STATE_FIRST: u64 = 1;
+    pub(super) const STATE_FIRST: u64 = 1;
     pub fn configure(meta: &mut ConstraintSystem<F>) -> Self {
         let characters = meta.advice_column();
         let state = meta.advice_column();
@@ -50,6 +50,8 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         let accepted_states = meta.lookup_table_column();
 
         meta.enable_equality(characters);
+        meta.enable_equality(state);
+        meta.enable_equality(char_enable);
 
         meta.create_gate("The state must start from 1", |meta| {
             let q_frist = meta.query_selector(q_first);
@@ -321,9 +323,7 @@ mod tests {
                 .iter()
                 .map(|lookup| &lookup[..])
                 .collect::<Vec<&[u64]>>();
-            println!("before load");
             config.load(&mut layouter, &lookups, &[ACCEPT_STATE])?;
-            println!("after load");
             // Starting state is 1 always
             let mut states = vec![Self::Config::STATE_FIRST];
             // let mut next_state = START_STATE;
