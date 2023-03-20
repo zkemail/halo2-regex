@@ -11,9 +11,9 @@ use halo2_base::{
     utils::{bigint_to_fe, biguint_to_fe, fe_to_biguint, modulus, PrimeField},
     AssignedValue, Context, QuantumCell,
 };
-use std::marker::PhantomData;
+use std::{collections::HashMap, marker::PhantomData};
 
-pub use crate::table::{read_2d_array, TransitionTableConfig};
+pub use crate::table::{read_regex_lookups, TransitionTableConfig};
 #[derive(Debug, Clone)]
 struct RangeConstrained<F: PrimeField>(AssignedCell<F, F>);
 
@@ -35,12 +35,20 @@ pub struct RegexCheckConfig<F: PrimeField> {
     q_first: Selector,
     not_q_first: Selector,
     accepted_states: TableColumn,
+    state_lookup: HashMap<(u8, u64), u64>,
+    accepted_state_vals: Vec<u64>,
+    max_chars_size: usize,
     _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField> RegexCheckConfig<F> {
     pub(super) const STATE_FIRST: u64 = 1;
-    pub fn configure(meta: &mut ConstraintSystem<F>) -> Self {
+    pub fn configure(
+        meta: &mut ConstraintSystem<F>,
+        state_lookup: HashMap<(u8, u64), u64>,
+        accepted_state_vals: &[u64],
+        max_chars_size: usize,
+    ) -> Self {
         let characters = meta.advice_column();
         let state = meta.advice_column();
         let char_enable = meta.advice_column();
@@ -52,6 +60,9 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         meta.enable_equality(characters);
         meta.enable_equality(state);
         meta.enable_equality(char_enable);
+
+        let mut accepted_state_vals = accepted_state_vals.to_vec();
+        accepted_state_vals.push(0);
 
         meta.create_gate("The state must start from 1", |meta| {
             let q_frist = meta.query_selector(q_first);
@@ -134,23 +145,19 @@ impl<F: PrimeField> RegexCheckConfig<F> {
             not_q_first,
             transition_table,
             accepted_states,
+            state_lookup,
+            accepted_state_vals,
+            max_chars_size,
             _marker: PhantomData,
         }
     }
 
-    pub fn load(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        lookups: &[&[u64]],
-        accepted_states: &[u64],
-    ) -> Result<(), Error> {
-        self.transition_table.load(layouter, lookups)?;
-        let mut accepted_states = accepted_states.to_vec();
-        accepted_states.push(0);
+    pub fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+        self.transition_table.load(layouter, &self.state_lookup)?;
         layouter.assign_table(
             || "accepted_states",
             |mut table| {
-                for (idx, state) in accepted_states.iter().enumerate() {
+                for (idx, state) in self.accepted_state_vals.iter().enumerate() {
                     table.assign_cell(
                         || format!("accepted state at {}", idx),
                         self.accepted_states,
@@ -169,16 +176,14 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         &self,
         region: &mut Region<F>,
         characters: &[u8],
-        states: &[u64],
-        max_chars_size: usize,
     ) -> Result<AssignedRegexResult<F>, Error> {
         let mut assigned_enables = Vec::new();
         let mut assigned_characters = Vec::new();
         let mut assigned_states = Vec::new();
-        debug_assert_eq!(characters.len() + 1, states.len());
+        let states = self.derive_states(characters);
 
         self.q_first.enable(region, 0)?;
-        for idx in 1..max_chars_size {
+        for idx in 1..self.max_chars_size {
             self.not_q_first.enable(region, idx)?;
         }
 
@@ -209,7 +214,7 @@ impl<F: PrimeField> RegexCheckConfig<F> {
             )?;
             assigned_states.push(assigned_s);
         }
-        for idx in characters.len()..max_chars_size {
+        for idx in characters.len()..self.max_chars_size {
             let assigned_enable = region.assign_advice(
                 || format!("char_enable at {}", idx),
                 self.char_enable,
@@ -225,7 +230,7 @@ impl<F: PrimeField> RegexCheckConfig<F> {
             )?;
             assigned_characters.push(assigned_c);
         }
-        for idx in characters.len()..max_chars_size + 1 {
+        for idx in characters.len()..self.max_chars_size + 1 {
             let state_val = if idx == characters.len() {
                 states[idx]
             } else {
@@ -242,33 +247,50 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         debug_assert_eq!(assigned_enables.len(), assigned_characters.len());
         debug_assert_eq!(assigned_characters.len() + 1, assigned_states.len());
 
-        // Enable q_decomposed
-        // for i in 0..STRING_LEN {
-        //     println!("{:?}, {:?}", characters[i], states[i]);
-        //     // offset = i;
-        //     if i < STRING_LEN - 1 {
-        //         self.q_lookup_state_selector.enable(region, i)?;
-        //     }
-        //     let assigned_c = region.assign_advice(
-        //         || format!("character"),
-        //         self.characters,
-        //         i,
-        //         || Value::known(F::from(characters[i] as u64)),
-        //     )?;
-        //     assigned_characters.push(assigned_c);
-        //     let assigned_s = region.assign_advice(
-        //         || format!("state"),
-        //         self.state,
-        //         i,
-        //         || Value::known(F::from(states[i])),
-        //     )?;
-        //     assigned_states.push(assigned_s);
-        // }
         Ok(AssignedRegexResult {
             enable_flags: assigned_enables,
             characters: assigned_characters,
             states: assigned_states,
         })
+    }
+
+    pub(crate) fn derive_states(&self, characters: &[u8]) -> Vec<u64> {
+        let mut states = vec![Self::STATE_FIRST];
+        for (idx, char) in characters.into_iter().enumerate() {
+            let state = states[idx];
+            let next_state = self.state_lookup.get(&(*char, state));
+            match next_state {
+                Some(s) => states.push(*s),
+                None => states.push(Self::STATE_FIRST),
+            };
+        }
+
+        // // Set the states to transition via the character and state that appear in the array, to the third value in each array tuple
+        // for idx in 0..self.characters.len() {
+        //     let character = self.characters[idx];
+        //     // states[i] = next_state;
+        //     let state = states[idx];
+        //     // next_state = START_STATE; // Default to start state if no match found
+        //     let mut is_found = false;
+        //     for j in 0..array.len() {
+        //         if array[j][2] == character as u64 && array[j][0] == state {
+        //             // next_state = array[j][1] as u64;
+        //             // println!(
+        //             //     "char {} cur_state {} next_state {}",
+        //             //     character as char, state, array[j][1]
+        //             // );
+        //             states.push(array[j][1]);
+        //             is_found = true;
+        //             break;
+        //         }
+        //     }
+        //     if !is_found {
+        //         // println!("not found {} {}", character as char, state);
+        //         states.push(Self::Config::STATE_FIRST);
+        //     }
+        // }
+        assert_eq!(states.len(), characters.len() + 1);
+        states
     }
 }
 
@@ -307,7 +329,10 @@ mod tests {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let config = RegexCheckConfig::configure(meta);
+            let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
+            let state_lookup = read_regex_lookups(lookup_filepath);
+            let config =
+                RegexCheckConfig::configure(meta, state_lookup, &[ACCEPT_STATE], MAX_STRING_LEN);
             config
         }
 
@@ -318,48 +343,48 @@ mod tests {
         ) -> Result<(), Error> {
             // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+"
             // accepted state: 23
-            let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
-            let array: Vec<Vec<u64>> = read_2d_array::<u64>(lookup_filepath);
-            let lookups = array
-                .iter()
-                .map(|lookup| &lookup[..])
-                .collect::<Vec<&[u64]>>();
-            config.load(&mut layouter, &lookups, &[ACCEPT_STATE])?;
+            // let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
+            // let array: Vec<Vec<u64>> = read_2d_array::<u64>(lookup_filepath);
+            // let lookups = array
+            //     .iter()
+            //     .map(|lookup| &lookup[..])
+            //     .collect::<Vec<&[u64]>>();
+            config.load(&mut layouter)?;
             // Starting state is 1 always
-            let mut states = vec![Self::Config::STATE_FIRST];
+            // let mut states = vec![Self::Config::STATE_FIRST];
             // let mut next_state = START_STATE;
 
             // Set the states to transition via the character and state that appear in the array, to the third value in each array tuple
-            for idx in 0..self.characters.len() {
-                let character = self.characters[idx];
-                // states[i] = next_state;
-                let state = states[idx];
-                // next_state = START_STATE; // Default to start state if no match found
-                let mut is_found = false;
-                for j in 0..array.len() {
-                    if array[j][2] == character as u64 && array[j][0] == state {
-                        // next_state = array[j][1] as u64;
-                        // println!(
-                        //     "char {} cur_state {} next_state {}",
-                        //     character as char, state, array[j][1]
-                        // );
-                        states.push(array[j][1]);
-                        is_found = true;
-                        break;
-                    }
-                }
-                if !is_found {
-                    // println!("not found {} {}", character as char, state);
-                    states.push(Self::Config::STATE_FIRST);
-                }
-            }
-            assert_eq!(states.len(), self.characters.len() + 1);
+            // for idx in 0..self.characters.len() {
+            //     let character = self.characters[idx];
+            //     // states[i] = next_state;
+            //     let state = states[idx];
+            //     // next_state = START_STATE; // Default to start state if no match found
+            //     let mut is_found = false;
+            //     for j in 0..array.len() {
+            //         if array[j][2] == character as u64 && array[j][0] == state {
+            //             // next_state = array[j][1] as u64;
+            //             // println!(
+            //             //     "char {} cur_state {} next_state {}",
+            //             //     character as char, state, array[j][1]
+            //             // );
+            //             states.push(array[j][1]);
+            //             is_found = true;
+            //             break;
+            //         }
+            //     }
+            //     if !is_found {
+            //         // println!("not found {} {}", character as char, state);
+            //         states.push(Self::Config::STATE_FIRST);
+            //     }
+            // }
+            // assert_eq!(states.len(), self.characters.len() + 1);
 
             print!("Synthesize being called...");
             layouter.assign_region(
                 || "regex",
                 |mut region| {
-                    config.assign_values(&mut region, &self.characters, &states, MAX_STRING_LEN)?;
+                    config.assign_values(&mut region, &self.characters)?;
                     Ok(())
                 },
             )?;
