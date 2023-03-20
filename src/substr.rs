@@ -24,6 +24,22 @@ pub struct SubstrDef {
     correct_state: u64,
 }
 
+impl SubstrDef {
+    pub fn new(
+        max_length: usize,
+        min_position: u64,
+        max_position: u64,
+        correct_state: u64,
+    ) -> Self {
+        Self {
+            max_length,
+            min_position,
+            max_position,
+            correct_state,
+        }
+    }
+}
+
 // #[derive(Debug, Clone)]
 // pub struct AssignedAllString<'a, F: PrimeField> {
 //     pub enable_flags: Vec<AssignedValue<'a, F>>,
