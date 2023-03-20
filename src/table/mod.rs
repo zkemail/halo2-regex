@@ -1,4 +1,4 @@
-use std::{fmt::format, marker::PhantomData};
+use std::{collections::HashMap, fmt::format, marker::PhantomData};
 
 use halo2_base::halo2_proofs::{
     circuit::{Layouter, Value},
@@ -38,64 +38,99 @@ impl<F: PrimeField> TransitionTableConfig<F> {
         }
     }
 
-    pub fn load(&self, layouter: &mut impl Layouter<F>, lookups: &[&[u64]]) -> Result<(), Error> {
+    pub fn load(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        state_lookup: &HashMap<(u8, u64), u64>,
+    ) -> Result<(), Error> {
         layouter.assign_table(
             || "load transition table",
             |mut table| {
-                let mut array = lookups.to_vec();
-                // Append [0, 0, 0] to array
-                let dummy_lookup = vec![0, 0, 0];
-                array.push(&dummy_lookup);
-                // print!("Array: {:?}", array);
                 let mut offset = 0;
-                for row in array {
-                    print!("Row: {:?} {:?}", row, offset);
+                let mut assign_row = |prev_state: u64, next_state: u64, char: u8| {
                     table.assign_cell(
                         || "prev_state",
                         self.prev_state,
                         offset,
-                        || Value::known(F::from(row[0])),
+                        || Value::known(F::from(prev_state)),
                     )?;
                     table.assign_cell(
                         || "next_state",
                         self.next_state,
                         offset,
-                        || Value::known(F::from(row[1])),
+                        || Value::known(F::from(next_state)),
                     )?;
                     table.assign_cell(
                         || "character",
                         self.character,
                         offset,
-                        || Value::known(F::from(row[2])),
+                        || Value::known(F::from(char as u64)),
                     )?;
                     offset += 1;
+                    Ok::<(), Error>(())
+                };
+                // let mut array = lookups.to_vec();
+                // Append a dummy row [0, 0, 0].
+                assign_row(0, 0, 0);
+                for ((char, prev_state), next_state) in state_lookup
+                    .keys()
+                    .into_iter()
+                    .zip(state_lookup.values().into_iter())
+                {
+                    assign_row(*prev_state, *next_state, *char)?;
                 }
+
+                // let dummy_lookup = vec![0, 0, 0];
+                // array.push(&dummy_lookup);
+                // // print!("Array: {:?}", array);
+                // let mut offset = 0;
+                // for row in array {
+                //     print!("Row: {:?} {:?}", row, offset);
+                //     table.assign_cell(
+                //         || "prev_state",
+                //         self.prev_state,
+                //         offset,
+                //         || Value::known(F::from(row[0])),
+                //     )?;
+                //     table.assign_cell(
+                //         || "next_state",
+                //         self.next_state,
+                //         offset,
+                //         || Value::known(F::from(row[1])),
+                //     )?;
+                //     table.assign_cell(
+                //         || "character",
+                //         self.character,
+                //         offset,
+                //         || Value::known(F::from(row[2])),
+                //     )?;
+                //     offset += 1;
+                // }
                 Ok(())
             },
         )
     }
 }
 
-pub fn read_2d_array<T>(file_path: &str) -> Vec<Vec<T>>
-where
-    T: FromStr,
-    <T as FromStr>::Err: std::fmt::Debug,
-{
+pub fn read_regex_lookups(file_path: &str) -> HashMap<(u8, u64), u64> {
     let file = File::open(file_path).unwrap();
     let reader = BufReader::new(file);
-    let mut array = Vec::new();
+    let mut state_lookup = HashMap::<(u8, u64), u64>::new();
+    // let mut array = Vec::new();
 
     for (idx, line) in reader.lines().enumerate() {
         let line = line.expect(&format!("fail to get {}-th line.", idx));
-        let elements: Vec<T> = line
+        let elements: Vec<u64> = line
             .split_whitespace()
             .map(|s| {
                 s.parse()
                     .expect(&format!("fail to parse string {} at {}-th line.", s, idx))
             })
             .collect();
-        array.push(elements);
+        state_lookup.insert((elements[2] as u8, elements[0]), elements[1]);
+        // array.push(elements);
     }
 
-    array
+    // array
+    state_lookup
 }
