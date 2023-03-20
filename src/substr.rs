@@ -33,9 +33,13 @@ pub struct SubstrDef {
 // }
 
 #[derive(Debug, Clone)]
-pub struct AssignedSubstrResult<'a, F: PrimeField> {
-    pub assigned_bytes: Vec<AssignedValue<'a, F>>,
-    pub assigned_length: AssignedValue<'a, F>,
+pub struct AssignedSubstrsResult<'a, F: PrimeField> {
+    pub all_enable_flags: Vec<AssignedValue<'a, F>>,
+    pub all_characters: Vec<AssignedValue<'a, F>>,
+    pub all_states: Vec<AssignedValue<'a, F>>,
+    pub all_indexes: Vec<AssignedValue<'a, F>>,
+    pub substrs_bytes: Vec<Vec<AssignedValue<'a, F>>>,
+    pub substrs_length: Vec<AssignedValue<'a, F>>,
 }
 
 #[derive(Debug, Clone)]
@@ -111,7 +115,7 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
         &self,
         ctx: &mut Context<'v, F>,
         characters: &[u8],
-    ) -> Result<Vec<AssignedSubstrResult<'a, F>>, Error> {
+    ) -> Result<AssignedSubstrsResult<'a, F>, Error> {
         let regex_result = self
             .regex_config
             .assign_values(&mut ctx.region, characters)?;
@@ -136,7 +140,8 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
         assigned_states.push(assigned_last_state);
 
         let states = self.regex_config.derive_states(characters);
-        let mut result = Vec::new();
+        let mut substrs_bytes: Vec<Vec<AssignedValue<'a, F>>> = Vec::new();
+        let mut substrs_length: Vec<AssignedValue<'a, F>> = Vec::new();
         for substr_def in self.substr_defs.iter() {
             let mut substr_positions = Vec::new();
             let mut in_matching = false;
@@ -222,11 +227,17 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
                 }
                 assigned_substr.push(new_substr_char);
             }
-            result.push(AssignedSubstrResult {
-                assigned_bytes: assigned_substr,
-                assigned_length: assigned_len,
-            });
+            substrs_bytes.push(assigned_substr);
+            substrs_length.push(assigned_len);
         }
+        let result = AssignedSubstrsResult {
+            all_enable_flags: assigned_flags,
+            all_characters: assigned_characters,
+            all_states: assigned_states,
+            all_indexes: assigned_indexes,
+            substrs_bytes: substrs_bytes,
+            substrs_length: substrs_length,
+        };
         Ok(result)
     }
 
@@ -359,7 +370,7 @@ mod test {
 
             layouter.assign_region(
                 || "regex",
-                |mut region| {
+                |region| {
                     if first_pass {
                         first_pass = false;
                         return Ok(());
