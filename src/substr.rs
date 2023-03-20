@@ -26,6 +26,7 @@ pub struct SubstrDef {
 
 #[derive(Debug, Clone)]
 pub struct AssignedAllString<'a, F: PrimeField> {
+    pub enable_flags: Vec<AssignedValue<'a, F>>,
     pub characters: Vec<AssignedValue<'a, F>>,
     pub states: Vec<AssignedValue<'a, F>>,
     pub indexes: Vec<AssignedValue<'a, F>>,
@@ -62,23 +63,40 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
         let regex_result =
             self.regex_config
                 .assign_values(&mut ctx.region, characters, states, max_chars_size)?;
+        let mut assigned_flags = Vec::new();
         let mut assigned_characters = Vec::new();
         let mut assigned_states = Vec::new();
         let mut assigned_indexes = Vec::new();
-        for (idx, (assigned_char, assigned_state)) in regex_result
-            .characters
-            .into_iter()
-            .zip(regex_result.states.into_iter())
-            .enumerate()
-        {
-            let assigned_c = self.assigned_cell2value(ctx, &assigned_char)?;
+        for idx in 0..regex_result.enable_flags.len() {
+            let assigned_f = self.assigned_cell2value(ctx, &regex_result.enable_flags[idx])?;
+            assigned_flags.push(assigned_f);
+            let assigned_c = self.assigned_cell2value(ctx, &regex_result.characters[idx])?;
             assigned_characters.push(assigned_c);
-            let assigned_s = self.assigned_cell2value(ctx, &assigned_state)?;
+            let assigned_s = self.assigned_cell2value(ctx, &regex_result.states[idx])?;
             assigned_states.push(assigned_s);
             let assigned_index = self.gate().load_constant(ctx, F::from(idx as u64));
             assigned_indexes.push(assigned_index);
         }
+        let assigned_last_state =
+            self.assigned_cell2value(ctx, &regex_result.states[regex_result.enable_flags.len()])?;
+        assigned_states.push(assigned_last_state);
+        // for (idx, (assigned_char, assigned_state)) in regex_result.enable_flags.into_iter().zip(regex_result
+        //     .characters
+        //     .into_iter())
+
+        //     .zip(regex_result.states.into_iter())
+        //     .enumerate()
+        // {
+        //     let assigned_f = self.assigned_cell2value(ctx, assigned_cell)
+        //     let assigned_c = self.assigned_cell2value(ctx, &assigned_char)?;
+        //     assigned_characters.push(assigned_c);
+        //     let assigned_s = self.assigned_cell2value(ctx, &assigned_state)?;
+        //     assigned_states.push(assigned_s);
+        //     let assigned_index = self.gate().load_constant(ctx, F::from(idx as u64));
+        //     assigned_indexes.push(assigned_index);
+        // }
         let result = AssignedAllString {
+            enable_flags: assigned_flags,
             characters: assigned_characters,
             states: assigned_states,
             indexes: assigned_indexes,
