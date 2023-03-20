@@ -48,7 +48,7 @@ impl SubstrDef {
 //     pub indexes: Vec<AssignedValue<'a, F>>,
 // }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AssignedSubstrsResult<'a, F: PrimeField> {
     pub all_enable_flags: Vec<AssignedValue<'a, F>>,
     pub all_characters: Vec<AssignedValue<'a, F>>,

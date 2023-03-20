@@ -17,7 +17,7 @@ pub use crate::table::{read_regex_lookups, TransitionTableConfig};
 #[derive(Debug, Clone)]
 struct RangeConstrained<F: PrimeField>(AssignedCell<F, F>);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AssignedRegexResult<F: PrimeField> {
     pub enable_flags: Vec<AssignedCell<F, F>>,
     pub characters: Vec<AssignedCell<F, F>>,
