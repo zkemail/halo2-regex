@@ -53,7 +53,7 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
     }
 
     pub fn assign_all_string<'v: 'a, 'a>(
-        &mut self,
+        &self,
         ctx: &mut Context<'v, F>,
         characters: &[u8],
         states: &[u64],
