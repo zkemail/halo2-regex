@@ -113,10 +113,11 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         });
 
         meta.lookup("The final state must be accepted", |meta| {
+            let not_q_frist = meta.query_selector(not_q_first);
             let cur_state = meta.query_advice(state, Rotation::cur());
             let cur_enable = meta.query_advice(char_enable, Rotation::cur());
-            let next_enable = meta.query_advice(char_enable, Rotation::next());
-            let enable_change = cur_enable.clone() - next_enable.clone();
+            let prev_enable = meta.query_advice(char_enable, Rotation::prev());
+            let enable_change = not_q_frist * (prev_enable.clone() - cur_enable.clone());
             let not_enable_change = Expression::Constant(F::from(1)) - enable_change.clone();
             let zero = Expression::Constant(F::from(0));
             vec![(
@@ -284,7 +285,7 @@ mod tests {
 
     // Checks a regex of string len
     const MAX_STRING_LEN: usize = 32;
-    const ACCEPT_STATE: u64 = 22;
+    const ACCEPT_STATE: u64 = 23;
 
     #[derive(Default, Clone, Debug)]
     struct TestRegexCheckCircuit<F: PrimeField> {
@@ -316,7 +317,7 @@ mod tests {
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
             // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+"
-            // accepted state: 22
+            // accepted state: 23
             let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
             let array: Vec<Vec<u64>> = read_2d_array::<u64>(lookup_filepath);
             let lookups = array
@@ -338,12 +339,17 @@ mod tests {
                 for j in 0..array.len() {
                     if array[j][2] == character as u64 && array[j][0] == state {
                         // next_state = array[j][1] as u64;
+                        // println!(
+                        //     "char {} cur_state {} next_state {}",
+                        //     character as char, state, array[j][1]
+                        // );
                         states.push(array[j][1]);
                         is_found = true;
                         break;
                     }
                 }
                 if !is_found {
+                    // println!("not found {} {}", character as char, state);
                     states.push(Self::Config::STATE_FIRST);
                 }
             }
@@ -362,16 +368,37 @@ mod tests {
     }
 
     #[test]
-    fn test_regex_pass() {
+    fn test_regex_pass1() {
         let k = 7; // 8, 128, etc
 
         // Convert query string to u128s
         let characters: Vec<u8> = "email was meant for @y".chars().map(|c| c as u8).collect();
 
-        // Make a vector of the numbers 1...24
-        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
-        // assert_eq!(characters.len(), STRING_LEN);
-        // assert_eq!(states.len(), STRING_LEN);
+        // Successful cases
+        let circuit = TestRegexCheckCircuit::<Fr> {
+            characters,
+            _marker: PhantomData,
+        };
+
+        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        prover.assert_satisfied();
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestRegexCheckCircuit<Fr>>::measure(
+                (k as u128).try_into().unwrap(),
+                &circuit
+            )
+        );
+    }
+
+    #[ignore]
+    #[test]
+    fn test_regex_pass2() {
+        let k = 7; // 8, 128, etc
+
+        // Convert query string to u128s
+        let characters: Vec<u8> = "email was meant for @yk".chars().map(|c| c as u8).collect();
 
         // Successful cases
         let circuit = TestRegexCheckCircuit::<Fr> {
@@ -411,7 +438,7 @@ mod tests {
             Err(e) => {
                 println!("Error successfully achieved!");
             }
-            _ => assert_eq!(1, 0),
+            _ => assert!(false, "Should be error."),
         }
     }
 

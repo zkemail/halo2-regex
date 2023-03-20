@@ -210,7 +210,7 @@ mod test {
 
     // Checks a regex of string len
     const MAX_STRING_LEN: usize = 32;
-    const ACCEPT_STATE: u64 = 22;
+    const ACCEPT_STATE: u64 = 23;
     const K: usize = 7;
 
     #[derive(Default, Clone, Debug)]
@@ -334,8 +334,7 @@ mod test {
     }
 
     #[test]
-    fn test_substr_pass() {
-        // Convert query string to u128s
+    fn test_substr_pass1() {
         let characters: Vec<u8> = "email was meant for @y".chars().map(|c| c as u8).collect();
         let substr_positions = vec![21];
         let substr_def = SubstrDef {
@@ -360,6 +359,88 @@ mod test {
 
         let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
         prover.assert_satisfied();
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestSubstrMatchCircuit<Fr>>::measure(
+                (K as u128).try_into().unwrap(),
+                &circuit
+            )
+        );
+    }
+
+    #[ignore]
+    #[test]
+    fn test_substr_pass2() {
+        let characters: Vec<u8> = "email was meant for @yajk"
+            .chars()
+            .map(|c| c as u8)
+            .collect();
+        let substr_positions = vec![21];
+        let substr_def = SubstrDef {
+            max_length: 4,
+            min_position: 21,
+            max_position: MAX_STRING_LEN as u64 - 4,
+            correct_state: 22,
+        };
+
+        // Make a vector of the numbers 1...24
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // assert_eq!(characters.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
+
+        // Successful cases
+        let circuit = TestSubstrMatchCircuit::<Fr> {
+            characters,
+            substr_positions,
+            substr_def,
+            _marker: PhantomData,
+        };
+
+        let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
+        prover.assert_satisfied();
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestSubstrMatchCircuit<Fr>>::measure(
+                (K as u128).try_into().unwrap(),
+                &circuit
+            )
+        );
+    }
+
+    #[test]
+    fn test_substr_fail1() {
+        // 1. The string does not satisfy the regex.
+        let characters: Vec<u8> = "email was meant for y".chars().map(|c| c as u8).collect();
+        let substr_positions = vec![21];
+        let substr_def = SubstrDef {
+            max_length: 4,
+            min_position: 21,
+            max_position: MAX_STRING_LEN as u64 - 4,
+            correct_state: 22,
+        };
+
+        // Make a vector of the numbers 1...24
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // assert_eq!(characters.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
+
+        // Successful cases
+        let circuit = TestSubstrMatchCircuit::<Fr> {
+            characters,
+            substr_positions,
+            substr_def,
+            _marker: PhantomData,
+        };
+
+        let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
+        match prover.verify() {
+            Err(_) => {
+                println!("Error successfully achieved!");
+            }
+            _ => assert!(false, "Should be error."),
+        }
         // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
         println!(
             "{:?}",
