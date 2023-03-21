@@ -71,7 +71,7 @@ impl<F: PrimeField> TransitionTableConfig<F> {
                 };
                 // let mut array = lookups.to_vec();
                 // Append a dummy row [0, 0, 0].
-                assign_row(0, 0, 0);
+                assign_row(0, 0, 0)?;
                 for ((char, prev_state), next_state) in state_lookup
                     .keys()
                     .into_iter()
@@ -112,25 +112,47 @@ impl<F: PrimeField> TransitionTableConfig<F> {
     }
 }
 
-pub fn read_regex_lookups(file_path: &str) -> HashMap<(u8, u64), u64> {
-    let file = File::open(file_path).unwrap();
-    let reader = BufReader::new(file);
-    let mut state_lookup = HashMap::<(u8, u64), u64>::new();
-    // let mut array = Vec::new();
+#[derive(Debug, Clone, Default)]
+pub struct RegexDef {
+    pub state_lookup: HashMap<(u8, u64), u64>,
+    pub first_state_val: u64,
+    pub accepted_state_vals: Vec<u64>,
+}
 
-    for (idx, line) in reader.lines().enumerate() {
-        let line = line.expect(&format!("fail to get {}-th line.", idx));
-        let elements: Vec<u64> = line
-            .split_whitespace()
-            .map(|s| {
-                s.parse()
-                    .expect(&format!("fail to parse string {} at {}-th line.", s, idx))
-            })
-            .collect();
-        state_lookup.insert((elements[2] as u8, elements[0]), elements[1]);
-        // array.push(elements);
+impl RegexDef {
+    pub fn read_from_text(file_path: &str) -> Self {
+        let file = File::open(file_path).unwrap();
+        let reader = BufReader::new(file);
+        let mut state_lookup = HashMap::<(u8, u64), u64>::new();
+        // let mut array = Vec::new();
+        let mut first_state_val = 0;
+        let mut accepted_state_vals = Vec::new();
+
+        for (idx, line) in reader.lines().enumerate() {
+            let line = line.expect(&format!("fail to get {}-th line.", idx));
+            let elements: Vec<u64> = line
+                .split_whitespace()
+                .map(|s| {
+                    s.parse()
+                        .expect(&format!("fail to parse string {} at {}-th line.", s, idx))
+                })
+                .collect();
+            if idx == 0 {
+                println!("first state {}", elements[0]);
+                first_state_val = elements[0];
+            } else if idx == 1 {
+                println!("accepted states {:?}", elements);
+                accepted_state_vals = elements;
+            } else {
+                println!("elements {:?}", elements);
+                state_lookup.insert((elements[2] as u8, elements[0]), elements[1]);
+            }
+            // array.push(elements);
+        }
+        Self {
+            state_lookup,
+            first_state_val,
+            accepted_state_vals,
+        }
     }
-
-    // array
-    state_lookup
 }

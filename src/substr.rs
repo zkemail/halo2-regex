@@ -291,12 +291,10 @@ mod test {
     use halo2_base::{gates::range::RangeStrategy::Vertical, ContextParams, SKIP_FIRST_PASS};
 
     use super::*;
-    use crate::table::read_regex_lookups;
+    use crate::table::RegexDef;
 
     // Checks a regex of string len
     const MAX_STRING_LEN: usize = 32;
-    const FIRST_STATE: u64 = 0;
-    const ACCEPT_STATE: u64 = 1;
     const K: usize = 8;
 
     #[derive(Default, Clone, Debug)]
@@ -325,14 +323,8 @@ mod test {
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
             let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
-            let state_lookup = read_regex_lookups(lookup_filepath);
-            let regex_config = RegexCheckConfig::configure(
-                meta,
-                state_lookup,
-                FIRST_STATE,
-                &[ACCEPT_STATE],
-                MAX_STRING_LEN,
-            );
+            let regex_def = RegexDef::read_from_text(lookup_filepath);
+            let regex_config = RegexCheckConfig::configure(meta, regex_def, MAX_STRING_LEN);
             let main_gate = FlexGateConfig::configure(
                 meta,
                 halo2_base::gates::flex_gate::GateStrategy::Vertical,
