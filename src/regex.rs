@@ -36,16 +36,17 @@ pub struct RegexCheckConfig<F: PrimeField> {
     not_q_first: Selector,
     accepted_states: TableColumn,
     state_lookup: HashMap<(u8, u64), u64>,
+    first_state_val: u64,
     accepted_state_vals: Vec<u64>,
     max_chars_size: usize,
     _marker: PhantomData<F>,
 }
 
 impl<F: PrimeField> RegexCheckConfig<F> {
-    pub(super) const STATE_FIRST: u64 = 1;
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
         state_lookup: HashMap<(u8, u64), u64>,
+        first_state_val: u64,
         accepted_state_vals: &[u64],
         max_chars_size: usize,
     ) -> Self {
@@ -72,7 +73,7 @@ impl<F: PrimeField> RegexCheckConfig<F> {
             vec![
                 q_frist.clone()
                     * cur_enable.clone()
-                    * (cur_state - Expression::Constant(F::from(Self::STATE_FIRST))),
+                    * (cur_state - Expression::Constant(F::from(first_state_val))),
                 q_frist * cur_enable * not_cur_enable,
             ]
         });
@@ -146,6 +147,7 @@ impl<F: PrimeField> RegexCheckConfig<F> {
             transition_table,
             accepted_states,
             state_lookup,
+            first_state_val,
             accepted_state_vals,
             max_chars_size,
             _marker: PhantomData,
@@ -255,13 +257,13 @@ impl<F: PrimeField> RegexCheckConfig<F> {
     }
 
     pub(crate) fn derive_states(&self, characters: &[u8]) -> Vec<u64> {
-        let mut states = vec![Self::STATE_FIRST];
+        let mut states = vec![self.first_state_val];
         for (idx, char) in characters.into_iter().enumerate() {
             let state = states[idx];
             let next_state = self.state_lookup.get(&(*char, state));
             match next_state {
                 Some(s) => states.push(*s),
-                None => states.push(Self::STATE_FIRST),
+                None => states.push(self.first_state_val),
             };
         }
 
@@ -307,7 +309,8 @@ mod tests {
 
     // Checks a regex of string len
     const MAX_STRING_LEN: usize = 32;
-    const ACCEPT_STATE: u64 = 23;
+    const FIRST_STATE: u64 = 0;
+    const ACCEPT_STATE: u64 = 1;
 
     #[derive(Default, Clone, Debug)]
     struct TestRegexCheckCircuit<F: PrimeField> {
@@ -331,8 +334,13 @@ mod tests {
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
             let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
             let state_lookup = read_regex_lookups(lookup_filepath);
-            let config =
-                RegexCheckConfig::configure(meta, state_lookup, &[ACCEPT_STATE], MAX_STRING_LEN);
+            let config = RegexCheckConfig::configure(
+                meta,
+                state_lookup,
+                FIRST_STATE,
+                &[ACCEPT_STATE],
+                MAX_STRING_LEN,
+            );
             config
         }
 
@@ -394,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_regex_pass1() {
-        let k = 7; // 8, 128, etc
+        let k = 8; // 8, 128, etc
 
         // Convert query string to u128s
         let characters: Vec<u8> = "email was meant for @y".chars().map(|c| c as u8).collect();
@@ -417,13 +425,15 @@ mod tests {
         );
     }
 
-    #[ignore]
     #[test]
     fn test_regex_pass2() {
-        let k = 7; // 8, 128, etc
+        let k = 8; // 8, 128, etc
 
         // Convert query string to u128s
-        let characters: Vec<u8> = "email was meant for @yk".chars().map(|c| c as u8).collect();
+        let characters: Vec<u8> = "email was meant for @ykjt"
+            .chars()
+            .map(|c| c as u8)
+            .collect();
 
         // Successful cases
         let circuit = TestRegexCheckCircuit::<Fr> {
@@ -445,7 +455,7 @@ mod tests {
 
     #[test]
     fn test_regex_fail() {
-        let k = 10;
+        let k = 8;
 
         // Convert query string to u128s
         let characters: Vec<u8> = "email isnt meant for u".chars().map(|c| c as u8).collect();

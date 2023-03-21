@@ -165,12 +165,14 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
             for position in
                 substr_def.min_position..=(substr_def.max_position + substr_max_len as u64)
             {
+                if position >= states.len() as u64 {
+                    break;
+                }
                 let cur_state = states[position as usize];
                 if cur_state != substr_def.correct_state {
                     if !in_matching {
                         continue;
                     } else {
-                        in_matching = false;
                         break;
                     }
                 } else {
@@ -293,8 +295,9 @@ mod test {
 
     // Checks a regex of string len
     const MAX_STRING_LEN: usize = 32;
-    const ACCEPT_STATE: u64 = 23;
-    const K: usize = 7;
+    const FIRST_STATE: u64 = 0;
+    const ACCEPT_STATE: u64 = 1;
+    const K: usize = 8;
 
     #[derive(Default, Clone, Debug)]
     struct TestSubstrMatchCircuit<F: PrimeField> {
@@ -323,8 +326,13 @@ mod test {
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
             let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
             let state_lookup = read_regex_lookups(lookup_filepath);
-            let regex_config =
-                RegexCheckConfig::configure(meta, state_lookup, &[ACCEPT_STATE], MAX_STRING_LEN);
+            let regex_config = RegexCheckConfig::configure(
+                meta,
+                state_lookup,
+                FIRST_STATE,
+                &[ACCEPT_STATE],
+                MAX_STRING_LEN,
+            );
             let main_gate = FlexGateConfig::configure(
                 meta,
                 halo2_base::gates::flex_gate::GateStrategy::Vertical,
@@ -434,7 +442,6 @@ mod test {
         );
     }
 
-    #[ignore]
     #[test]
     fn test_substr_pass2() {
         let characters: Vec<u8> = "email was meant for @yajk"
