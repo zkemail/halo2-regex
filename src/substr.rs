@@ -78,55 +78,6 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
         }
     }
 
-    // pub fn assign_all_string<'v: 'a, 'a>(
-    //     &self,
-    //     ctx: &mut Context<'v, F>,
-    //     characters: &[u8],
-    // ) -> Result<AssignedAllString<'a, F>, Error> {
-    //     let regex_result = self
-    //         .regex_config
-    //         .assign_values(&mut ctx.region, characters)?;
-    //     let mut assigned_flags = Vec::new();
-    //     let mut assigned_characters = Vec::new();
-    //     let mut assigned_states = Vec::new();
-    //     let mut assigned_indexes = Vec::new();
-    //     for idx in 0..regex_result.enable_flags.len() {
-    //         let assigned_f = self.assigned_cell2value(ctx, &regex_result.enable_flags[idx])?;
-    //         assigned_flags.push(assigned_f);
-    //         let assigned_c = self.assigned_cell2value(ctx, &regex_result.characters[idx])?;
-    //         assigned_characters.push(assigned_c);
-    //         let assigned_s = self.assigned_cell2value(ctx, &regex_result.states[idx])?;
-    //         assigned_states.push(assigned_s);
-    //         let assigned_index = self.gate().load_constant(ctx, F::from(idx as u64));
-    //         assigned_indexes.push(assigned_index);
-    //     }
-    //     let assigned_last_state =
-    //         self.assigned_cell2value(ctx, &regex_result.states[regex_result.enable_flags.len()])?;
-    //     assigned_states.push(assigned_last_state);
-    //     // for (idx, (assigned_char, assigned_state)) in regex_result.enable_flags.into_iter().zip(regex_result
-    //     //     .characters
-    //     //     .into_iter())
-
-    //     //     .zip(regex_result.states.into_iter())
-    //     //     .enumerate()
-    //     // {
-    //     //     let assigned_f = self.assigned_cell2value(ctx, assigned_cell)
-    //     //     let assigned_c = self.assigned_cell2value(ctx, &assigned_char)?;
-    //     //     assigned_characters.push(assigned_c);
-    //     //     let assigned_s = self.assigned_cell2value(ctx, &assigned_state)?;
-    //     //     assigned_states.push(assigned_s);
-    //     //     let assigned_index = self.gate().load_constant(ctx, F::from(idx as u64));
-    //     //     assigned_indexes.push(assigned_index);
-    //     // }
-    //     let result = AssignedAllString {
-    //         enable_flags: assigned_flags,
-    //         characters: assigned_characters,
-    //         states: assigned_states,
-    //         indexes: assigned_indexes,
-    //     };
-    //     Ok(result)
-    // }
-
     pub fn match_substrs<'v: 'a, 'a>(
         &self,
         ctx: &mut Context<'v, F>,
@@ -257,6 +208,12 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
             substrs_length: substrs_length,
         };
         Ok(result)
+    }
+
+    pub fn extractSubstr<'v: 'a, 'a>(
+        &self,
+        ctx: &mut Context<'v, F>,
+    ) -> Result<AssignedSubstrsResult<'a, F>, Error> {
     }
 
     pub fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
@@ -411,10 +368,6 @@ mod test {
     #[test]
     fn test_substr_pass1() {
         let characters: Vec<u8> = "email was meant for @y".chars().map(|c| c as u8).collect();
-        // Make a vector of the numbers 1...24
-        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
-        // assert_eq!(characters.len(), STRING_LEN);
-        // assert_eq!(states.len(), STRING_LEN);
 
         // Successful cases
         let circuit = TestSubstrMatchCircuit::<Fr> {
@@ -424,7 +377,6 @@ mod test {
 
         let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
         prover.assert_satisfied();
-        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
         println!(
             "{:?}",
             CircuitCost::<G1, TestSubstrMatchCircuit<Fr>>::measure(
@@ -440,10 +392,6 @@ mod test {
             .chars()
             .map(|c| c as u8)
             .collect();
-        // Make a vector of the numbers 1...24
-        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
-        // assert_eq!(characters.len(), STRING_LEN);
-        // assert_eq!(states.len(), STRING_LEN);
 
         // Successful cases
         let circuit = TestSubstrMatchCircuit::<Fr> {
@@ -467,11 +415,6 @@ mod test {
     fn test_substr_fail1() {
         // 1. The string does not satisfy the regex.
         let characters: Vec<u8> = "email was meant for @@".chars().map(|c| c as u8).collect();
-
-        // Make a vector of the numbers 1...24
-        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
-        // assert_eq!(characters.len(), STRING_LEN);
-        // assert_eq!(states.len(), STRING_LEN);
 
         // Successful cases
         let circuit = TestSubstrMatchCircuit::<Fr> {

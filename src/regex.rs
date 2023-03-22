@@ -11,7 +11,12 @@ use halo2_base::{
     utils::{bigint_to_fe, biguint_to_fe, fe_to_biguint, modulus, PrimeField},
     AssignedValue, Context, QuantumCell,
 };
-use std::{collections::HashMap, marker::PhantomData};
+use std::marker::PhantomData;
+
+use crate::table::TransitionTableConfig;
+
+// Checks a regex of string len
+pub const STRING_LEN: usize = 22;
 
 pub use crate::table::{RegexDef, TransitionTableConfig};
 #[derive(Debug, Clone)]

@@ -138,9 +138,6 @@ impl RegexDef {
                 })
                 .collect();
             if idx == 0 {
-                println!("first state {}", elements[0]);
-                first_state_val = elements[0];
-            } else if idx == 1 {
                 println!("accepted states {:?}", elements);
                 accepted_state_vals = elements;
             } else {
