@@ -16,6 +16,7 @@ use std::marker::PhantomData;
 use crate::table::TransitionTableConfig;
 use crate::{AssignedRegexResult, RegexCheckConfig};
 
+// These are fixed at compile time (TODO: is this correct? I think so)
 #[derive(Debug, Clone, Default)]
 pub struct SubstrDef {
     max_length: usize,
@@ -82,6 +83,8 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
         &self,
         ctx: &mut Context<'v, F>,
         characters: &[u8],
+        start_reveal_position: u64,
+        end_reveal_position: u64,
     ) -> Result<AssignedSubstrsResult<'a, F>, Error> {
         let regex_result = self
             .regex_config
@@ -109,96 +112,138 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
         let states = self.regex_config.derive_states(characters);
         let mut substrs_bytes: Vec<Vec<AssignedValue<'a, F>>> = Vec::new();
         let mut substrs_length: Vec<AssignedValue<'a, F>> = Vec::new();
-        for substr_def in self.substr_defs.iter() {
-            let mut substr_positions = Vec::new();
-            let mut in_matching = false;
-            let substr_max_len = substr_def.max_length;
-            for position in
-                substr_def.min_position..=(substr_def.max_position + substr_max_len as u64)
-            {
-                if position >= states.len() as u64 {
-                    break;
-                }
-                let cur_state = states[position as usize];
-                if cur_state != substr_def.correct_state {
-                    if !in_matching {
-                        continue;
-                    } else {
-                        break;
-                    }
-                } else {
-                    substr_positions.push(position);
-                    if !in_matching {
-                        in_matching = true;
-                    }
-                }
-            }
-            let mut assigned_substr = Vec::new();
-            let mut assigned_len = gate.load_zero(ctx);
-            let mut last_selector = gate.load_constant(ctx, F::one());
-            let mut substr_positions = substr_positions.to_vec();
 
-            substr_positions.append(&mut vec![
-                all_max_len as u64;
-                substr_max_len - substr_positions.len()
-            ]);
-            for idx in 0..substr_max_len {
-                let assigned_target_i =
-                    gate.load_witness(ctx, Value::known(F::from(substr_positions[idx])));
-                let mut new_substr_char = gate.load_zero(ctx);
+        let mut start_index = gate.load_constant(ctx, F::from(start_reveal_position));
+        let mut end_index = gate.load_constant(ctx, F::from(end_reveal_position));
+
+        // Decompose start_index via gate.num_to_bits
+        const MAX_BITS: usize = 64;
+        const MAX_EMAIL_LEN: usize = 1024; // TODO: make this corespond to SubstrDef.maxLength
+        let mut start_index_bits = gate.num_to_bits(ctx, &start_index, MAX_BITS);
+        start_index_bits.reverse(); // Reverse from little endian to bit 0, 1, 2, ...
+
+        // Translate into log(n) copies of the email, each shifted by that many bits backwards
+        for substr_def in self.substr_defs.iter() {
+            let mut previous_row = Vec::new();
+            previous_row.push(assigned_characters.clone()); // TODO: Can you clone AssignedValues??
+            let max_len = substr_def.max_length;
+            for log_offset in 0..MAX_BITS {
+                let mut this_row = Vec::new();
                 for position in (substr_def.min_position as usize + idx)
                     ..=(substr_def.max_position as usize + idx)
                 {
-                    let assigned_c = &assigned_characters[position];
-                    let assigned_s = &assigned_states[position];
-                    let assigned_i = &assigned_indexes[position];
-                    let index_sub = gate.sub(
+                    let offset = (position + 2 * *log_offset) % max_len;
+
+                    let value_if_offset_selected = gate.mul(
                         ctx,
-                        QuantumCell::Existing(&assigned_i),
-                        QuantumCell::Existing(&assigned_target_i),
+                        QuantumCell::Existing(&start_index_bits[log_offset]),
+                        QuantumCell::Existing(&previous_row[log_offset][position]),
                     );
-                    let selector = gate.is_zero(ctx, &index_sub);
-                    // state constraints.
-                    {
-                        let sub = gate.sub(
-                            ctx,
-                            QuantumCell::Existing(&assigned_s),
-                            QuantumCell::Constant(F::from(substr_def.correct_state)),
-                        );
-                        let state_constraint = gate.mul(
-                            ctx,
-                            QuantumCell::Existing(&selector),
-                            QuantumCell::Existing(&sub),
-                        );
-                        gate.assert_is_const(ctx, &state_constraint, F::zero());
-                    }
-                    // The selector constraints: 0->0, 1->0, 1->1 are allowed, but 0->1 is invalid!
-                    {
-                        let sub = gate.sub(
-                            ctx,
-                            QuantumCell::Existing(&last_selector),
-                            QuantumCell::Existing(&selector),
-                        );
-                        gate.assert_bit(ctx, &sub);
-                    }
-                    new_substr_char = gate.mul_add(
+
+                    let offset_not_selected = gate.sub(
                         ctx,
-                        QuantumCell::Existing(&assigned_c),
-                        QuantumCell::Existing(&selector),
-                        QuantumCell::Existing(&new_substr_char),
+                        QuantumCell::Constant(F::one()),
+                        QuantumCell::Existing(&start_index_bits[log_offset]),
                     );
-                    assigned_len = gate.add(
+
+                    let value_if_offset_not_selected = gate.mul(
                         ctx,
-                        QuantumCell::Existing(&assigned_len),
-                        QuantumCell::Existing(&selector),
+                        QuantumCell::Existing(&offset_not_selected),
+                        QuantumCell::Existing(&previous_row[log_offset][position]),
                     );
-                    last_selector = selector;
+
+                    this_row.push(gate.add(
+                        ctx,
+                        QuantumCell::Existing(&value_if_offset_selected),
+                        QuantumCell::Existing(&value_if_offset_not_selected),
+                    ));
                 }
-                assigned_substr.push(new_substr_char);
+                previous_row.push(this_row.clone());
             }
-            substrs_bytes.push(assigned_substr);
-            substrs_length.push(assigned_len);
+            substrs_bytes.push(previous_row[MAX_BITS].clone());
+            substrs_length.push(gate.sub(
+                ctx,
+                QuantumCell::Existing(&end_index),
+                QuantumCell::Existing(&start_index),
+            ));
         }
+
+        // for substr_def in self.substr_defs.iter() {
+        //     let mut substr_positions = Vec::new();
+        //     let mut in_matching = false;
+        //     let substr_max_len = substr_def.max_length;
+        //     for position in
+        //         substr_def.min_position..=(substr_def.max_position + substr_max_len as u64)
+        //     {
+        //         if position >= states.len() as u64 {
+        //             break;
+        //         }
+        //     let mut assigned_substr = Vec::new();
+        //     let mut assigned_len = gate.load_zero(ctx);
+        //     let mut last_selector = gate.load_constant(ctx, F::one());
+        //     let mut substr_positions = substr_positions.to_vec();
+
+        //     substr_positions.append(&mut vec![
+        //         all_max_len as u64;
+        //         substr_max_len - substr_positions.len()
+        //     ]);
+        //     for idx in 0..substr_max_len {
+        //         let assigned_target_i =
+        //             gate.load_witness(ctx, Value::known(F::from(substr_positions[idx])));
+        //         let mut new_substr_char = gate.load_zero(ctx);
+        //         for position in (substr_def.min_position as usize + idx)
+        //             ..=(substr_def.max_position as usize + idx)
+        //         {
+        //             let assigned_c = &assigned_characters[position];
+        //             let assigned_s = &assigned_states[position];
+        //             let assigned_i = &assigned_indexes[position];
+        //             let index_sub = gate.sub(
+        //                 ctx,
+        //                 QuantumCell::Existing(&assigned_i),
+        //                 QuantumCell::Existing(&assigned_target_i),
+        //             );
+        //             let selector = gate.is_zero(ctx, &index_sub);
+        //             // state constraints.
+        //             {
+        //                 let sub = gate.sub(
+        //                     ctx,
+        //                     QuantumCell::Existing(&assigned_s),
+        //                     QuantumCell::Constant(F::from(substr_def.correct_state)),
+        //                 );
+        //                 let state_constraint = gate.mul(
+        //                     ctx,
+        //                     QuantumCell::Existing(&selector),
+        //                     QuantumCell::Existing(&sub),
+        //                 );
+        //                 gate.assert_is_const(ctx, &state_constraint, F::zero());
+        //             }
+        //             // The selector constraints: 0->0, 1->0, 1->1 are allowed, but 0->1 is invalid!
+        //             {
+        //                 let sub = gate.sub(
+        //                     ctx,
+        //                     QuantumCell::Existing(&last_selector),
+        //                     QuantumCell::Existing(&selector),
+        //                 );
+        //                 gate.assert_bit(ctx, &sub);
+        //             }
+        //             new_substr_char = gate.mul_add(
+        //                 ctx,
+        //                 QuantumCell::Existing(&assigned_c),
+        //                 QuantumCell::Existing(&selector),
+        //                 QuantumCell::Existing(&new_substr_char),
+        //             );
+        //             assigned_len = gate.add(
+        //                 ctx,
+        //                 QuantumCell::Existing(&assigned_len),
+        //                 QuantumCell::Existing(&selector),
+        //             );
+        //             last_selector = selector;
+        //         }
+        //         assigned_substr.push(new_substr_char);
+        //     }
+        //     substrs_bytes.push(assigned_substr);
+        //     substrs_length.push(assigned_len);
+        // }
         let result = AssignedSubstrsResult {
             all_enable_flags: assigned_flags,
             all_characters: assigned_characters,
