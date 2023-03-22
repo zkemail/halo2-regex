@@ -7,7 +7,6 @@ use halo2_base::halo2_proofs::{
 use halo2_base::utils::PrimeField;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::str::FromStr;
 
 // struct Sizes {
 //     RANGE: usize,
@@ -117,6 +116,7 @@ pub struct RegexDef {
     pub state_lookup: HashMap<(u8, u64), u64>,
     pub first_state_val: u64,
     pub accepted_state_vals: Vec<u64>,
+    pub largest_state_val: u64,
 }
 
 impl RegexDef {
@@ -127,6 +127,7 @@ impl RegexDef {
         // let mut array = Vec::new();
         let mut first_state_val = 0;
         let mut accepted_state_vals = Vec::new();
+        let mut largest_state_val = 0;
 
         for (idx, line) in reader.lines().enumerate() {
             let line = line.expect(&format!("fail to get {}-th line.", idx));
@@ -143,6 +144,9 @@ impl RegexDef {
             } else if idx == 1 {
                 println!("accepted states {:?}", elements);
                 accepted_state_vals = elements;
+            } else if idx == 2 {
+                println!("largest state {}", elements[0]);
+                largest_state_val = elements[0];
             } else {
                 println!("elements {:?}", elements);
                 state_lookup.insert((elements[2] as u8, elements[0]), elements[1]);
@@ -153,6 +157,7 @@ impl RegexDef {
             state_lookup,
             first_state_val,
             accepted_state_vals,
+            largest_state_val,
         }
     }
 }
