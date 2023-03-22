@@ -137,7 +137,7 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
                     let value_if_offset_selected = gate.mul(
                         ctx,
                         QuantumCell::Existing(&start_index_bits[log_offset]),
-                        QuantumCell::Existing(&previous_row[log_offset][position]),
+                        QuantumCell::Existing(&previous_row[log_offset][offset]),
                     );
 
                     let offset_not_selected = gate.sub(
