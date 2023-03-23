@@ -697,7 +697,7 @@ mod test {
     use crate::table::RegexDef;
 
     // Checks a regex of string len
-    const MAX_STRING_LEN: usize = 32;
+    const MAX_STRING_LEN: usize = 128;
     const K: usize = 13;
 
     #[derive(Default, Clone, Debug)]
@@ -745,6 +745,7 @@ mod test {
                     (9, 10),
                     (10, 11),
                     (11, 12),
+                    (12, 4),
                     (12, 12),
                 ]),
             };
@@ -862,6 +863,35 @@ mod test {
     #[test]
     fn test_substr_pass2() {
         let characters: Vec<u8> = "email was meant for @yajk."
+            .chars()
+            .map(|c| c as u8)
+            .collect();
+        // Make a vector of the numbers 1...24
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // assert_eq!(characters.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
+
+        // Successful cases
+        let circuit = TestSubstrMatchCircuit::<Fr> {
+            characters,
+            _marker: PhantomData,
+        };
+
+        let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
+        prover.assert_satisfied();
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestSubstrMatchCircuit<Fr>>::measure(
+                (K as u128).try_into().unwrap(),
+                &circuit
+            )
+        );
+    }
+
+    #[test]
+    fn test_substr_pass3() {
+        let characters: Vec<u8> = "email was meant for @yajk and kaiew and oiewk."
             .chars()
             .map(|c| c as u8)
             .collect();
