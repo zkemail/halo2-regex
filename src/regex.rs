@@ -35,7 +35,7 @@ pub struct RegexCheckConfig<F: PrimeField> {
     q_first: Selector,
     not_q_first: Selector,
     accepted_states: TableColumn,
-    regex_def: RegexDef,
+    pub(crate) regex_def: RegexDef,
     max_chars_size: usize,
     _marker: PhantomData<F>,
 }
@@ -304,7 +304,7 @@ mod tests {
     use super::*;
 
     // Checks a regex of string len
-    const MAX_STRING_LEN: usize = 32;
+    const MAX_STRING_LEN: usize = 128;
 
     #[derive(Default, Clone, Debug)]
     struct TestRegexCheckCircuit<F: PrimeField> {
@@ -337,7 +337,7 @@ mod tests {
             config: Self::Config,
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
-            // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+"
+            // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+( and (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+)*."
             // accepted state: 23
             // let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
             // let array: Vec<Vec<u64>> = read_2d_array::<u64>(lookup_filepath);
@@ -390,10 +390,10 @@ mod tests {
 
     #[test]
     fn test_regex_pass1() {
-        let k = 8; // 8, 128, etc
+        let k = 9; // 8, 128, etc
 
         // Convert query string to u128s
-        let characters: Vec<u8> = "email was meant for @y".chars().map(|c| c as u8).collect();
+        let characters: Vec<u8> = "email was meant for @y.".chars().map(|c| c as u8).collect();
 
         // Successful cases
         let circuit = TestRegexCheckCircuit::<Fr> {
@@ -418,7 +418,7 @@ mod tests {
         let k = 8; // 8, 128, etc
 
         // Convert query string to u128s
-        let characters: Vec<u8> = "email was meant for @ykjt"
+        let characters: Vec<u8> = "email was meant for @ykjt."
             .chars()
             .map(|c| c as u8)
             .collect();
@@ -442,11 +442,93 @@ mod tests {
     }
 
     #[test]
-    fn test_regex_fail() {
+    fn test_regex_pass3() {
+        let k = 8; // 8, 128, etc
+
+        // Convert query string to u128s
+        let characters: Vec<u8> = "email was meant for @ykjt and stya and jeyp."
+            .chars()
+            .map(|c| c as u8)
+            .collect();
+
+        // Successful cases
+        let circuit = TestRegexCheckCircuit::<Fr> {
+            characters,
+            _marker: PhantomData,
+        };
+
+        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        prover.assert_satisfied();
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestRegexCheckCircuit<Fr>>::measure(
+                (k as u128).try_into().unwrap(),
+                &circuit
+            )
+        );
+    }
+
+    #[test]
+    fn test_regex_fail1() {
         let k = 8;
 
         // Convert query string to u128s
-        let characters: Vec<u8> = "email isnt meant for u".chars().map(|c| c as u8).collect();
+        let characters: Vec<u8> = "email was meant for @y".chars().map(|c| c as u8).collect();
+
+        // assert_eq!(characters.len(), STRING_LEN);
+
+        // Out-of-range `value = 8`
+        let circuit = TestRegexCheckCircuit::<Fr> {
+            characters: characters,
+            // states: states,
+            _marker: PhantomData,
+        };
+        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        match prover.verify() {
+            Err(e) => {
+                println!("Error successfully achieved!");
+            }
+            _ => assert!(false, "Should be error."),
+        }
+    }
+
+    #[test]
+    fn test_regex_fail2() {
+        let k = 8;
+
+        // Convert query string to u128s
+        let characters: Vec<u8> = "email was meant for @y and @a."
+            .chars()
+            .map(|c| c as u8)
+            .collect();
+
+        // assert_eq!(characters.len(), STRING_LEN);
+
+        // Out-of-range `value = 8`
+        let circuit = TestRegexCheckCircuit::<Fr> {
+            characters: characters,
+            // states: states,
+            _marker: PhantomData,
+        };
+        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        match prover.verify() {
+            Err(e) => {
+                println!("Error successfully achieved!");
+            }
+            _ => assert!(false, "Should be error."),
+        }
+    }
+
+    #[test]
+    fn test_regex_fail3() {
+        let k = 8;
+
+        // Convert query string to u128s
+        let characters: Vec<u8> = "email was meant for @y and @a, right?"
+            .chars()
+            .map(|c| c as u8)
+            .collect();
 
         // assert_eq!(characters.len(), STRING_LEN);
 
