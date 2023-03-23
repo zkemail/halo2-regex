@@ -367,36 +367,57 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
     }
 
     pub fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
-        self.regex_config.load(layouter)?;
-        layouter.assign_table(
-            || "substring valid/invalid states",
-            |mut table| {
-                let max_state_id = self.regex_config.regex_def.largest_state_val;
-                for (id_def, substr_def) in self.substr_defs.iter().enumerate() {
-                    let valid_states = &substr_def.valid_states;
-                    let mut offset = 0;
-                    for state_id in 0..=max_state_id {
-                        match valid_states.iter().position(|x| *x == state_id) {
-                            Some(_) => table.assign_cell(
-                                || format!("{} is a valid state", state_id),
-                                self.valid_states[id_def],
-                                offset,
-                                || Value::known(F::from(state_id)),
-                            ),
-                            None => table.assign_cell(
-                                || format!("{} is an invalid state", state_id),
-                                self.invalid_states[id_def],
-                                offset,
-                                || Value::known(F::from(state_id)),
-                            ),
-                        }?;
-                        offset += 1;
-                    }
-                }
-                Ok(())
-            },
-        )?;
-
+        // self.regex_config.load(layouter)?;
+        println!("ok?");
+        // layouter.assign_table(
+        //     || "substring valid and invalid states",
+        //     |mut table| {
+        //         let max_state_id = self.regex_config.regex_def.largest_state_val;
+        //         for (id_def, substr_def) in self.substr_defs.iter().enumerate() {
+        //             let valid_states = &substr_def.valid_states;
+        //             println!("valid_states {:?}", valid_states);
+        //             let mut offset_valid = 0;
+        //             let mut offset_invalid = 0;
+        //             for state_id in 0..=max_state_id {
+        //                 match valid_states.iter().position(|x| *x == state_id) {
+        //                     Some(_) => {
+        //                         println!("valid state_id {}", state_id);
+        //                         table.assign_cell(
+        //                             || {
+        //                                 format!(
+        //                                     "{} is a valid state for the {}-th substring",
+        //                                     state_id, id_def
+        //                                 )
+        //                             },
+        //                             self.valid_states[id_def],
+        //                             offset_valid,
+        //                             || Value::known(F::from(state_id)),
+        //                         )?;
+        //                         offset_valid += 1;
+        //                     }
+        //                     None => {
+        //                         println!("invalid state_id {}", state_id);
+        //                         table.assign_cell(
+        //                             || {
+        //                                 format!(
+        //                                     "{} is an invalid state for the {}-th substring",
+        //                                     state_id, id_def
+        //                                 )
+        //                             },
+        //                             self.invalid_states[id_def],
+        //                             offset_invalid,
+        //                             || Value::known(F::from(state_id)),
+        //                         )?;
+        //                         offset_invalid += 1;
+        //                     }
+        //                 };
+        //             }
+        //         }
+        //         Ok(())
+        //     },
+        // )?;
+        layouter.assign_table(|| "substring valid and invalid states", |mut table| Ok(()))?;
+        println!("ok!");
         Ok(())
     }
 
@@ -450,228 +471,234 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use halo2_base::halo2_proofs::{
-//         circuit::floor_planner::V1,
-//         dev::{CircuitCost, FailureLocation, MockProver, VerifyFailure},
-//         halo2curves::bn256::{Fr, G1},
-//         plonk::{Any, Circuit},
-//     };
-//     use halo2_base::{gates::range::RangeStrategy::Vertical, ContextParams, SKIP_FIRST_PASS};
+#[cfg(test)]
+mod test {
+    use halo2_base::halo2_proofs::{
+        circuit::floor_planner::V1,
+        dev::{CircuitCost, FailureLocation, MockProver, VerifyFailure},
+        halo2curves::bn256::{Fr, G1},
+        plonk::{Any, Circuit},
+    };
+    use halo2_base::{gates::range::RangeStrategy::Vertical, ContextParams, SKIP_FIRST_PASS};
 
-//     use super::*;
-//     use crate::table::RegexDef;
+    use super::*;
+    use crate::table::RegexDef;
 
-//     // Checks a regex of string len
-//     const MAX_STRING_LEN: usize = 32;
-//     const K: usize = 8;
+    // Checks a regex of string len
+    const MAX_STRING_LEN: usize = 32;
+    const K: usize = 13;
 
-//     #[derive(Default, Clone, Debug)]
-//     struct TestSubstrMatchCircuit<F: PrimeField> {
-//         // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
-//         characters: Vec<u8>,
-//         _marker: PhantomData<F>,
-//     }
+    #[derive(Default, Clone, Debug)]
+    struct TestSubstrMatchCircuit<F: PrimeField> {
+        // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
+        characters: Vec<u8>,
+        _marker: PhantomData<F>,
+    }
 
-//     impl<F: PrimeField> TestSubstrMatchCircuit<F> {
-//         const NUM_ADVICE: usize = 50;
-//         const NUM_FIXED: usize = 1;
-//         const NUM_LOOKUP_ADVICE: usize = 8;
-//         const LOOKUP_BITS: usize = 12;
-//     }
+    impl<F: PrimeField> TestSubstrMatchCircuit<F> {
+        const NUM_ADVICE: usize = 50;
+        const NUM_FIXED: usize = 1;
+        const NUM_LOOKUP_ADVICE: usize = 8;
+        const LOOKUP_BITS: usize = 12;
+    }
 
-//     impl<F: PrimeField> Circuit<F> for TestSubstrMatchCircuit<F> {
-//         type Config = SubstrMatchConfig<F>;
-//         type FloorPlanner = SimpleFloorPlanner;
+    impl<F: PrimeField> Circuit<F> for TestSubstrMatchCircuit<F> {
+        type Config = SubstrMatchConfig<F>;
+        type FloorPlanner = SimpleFloorPlanner;
 
-//         // Circuit without witnesses, called only during key generation
-//         fn without_witnesses(&self) -> Self {
-//             Self {
-//                 characters: vec![],
-//                 _marker: PhantomData,
-//             }
-//         }
+        // Circuit without witnesses, called only during key generation
+        fn without_witnesses(&self) -> Self {
+            Self {
+                characters: vec![],
+                _marker: PhantomData,
+            }
+        }
 
-//         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-//             let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
-//             let regex_def = RegexDef::read_from_text(lookup_filepath);
-//             let substr_def = SubstrDef {
-//                 max_length: 4,
-//                 min_position: 21,
-//                 max_position: MAX_STRING_LEN as u64 - 4,
-//                 correct_state: 22,
-//             };
-//             let range_config = RangeConfig::configure(
-//                 meta,
-//                 Vertical,
-//                 &[Self::NUM_ADVICE],
-//                 &[Self::NUM_LOOKUP_ADVICE],
-//                 Self::NUM_FIXED,
-//                 Self::LOOKUP_BITS,
-//                 0,
-//                 K,
-//             );
-//             let config = SubstrMatchConfig::configure(
-//                 meta,
-//                 regex_def,
-//                 MAX_STRING_LEN,
-//                 range_config,
-//                 vec![substr_def],
-//             );
-//             config
-//         }
+        fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+            let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
+            let regex_def = RegexDef::read_from_text(lookup_filepath);
+            let substr_def1 = SubstrDef {
+                max_length: 4,
+                min_position: 21,
+                max_position: MAX_STRING_LEN as u64 - 4,
+                valid_states: vec![29, 1],
+            };
+            let substr_def2 = SubstrDef {
+                max_length: 4,
+                min_position: 21,
+                max_position: MAX_STRING_LEN as u64 - 4,
+                valid_states: vec![4, 8, 9, 10, 11, 12],
+            };
+            let range_config = RangeConfig::configure(
+                meta,
+                Vertical,
+                &[Self::NUM_ADVICE],
+                &[Self::NUM_LOOKUP_ADVICE],
+                Self::NUM_FIXED,
+                Self::LOOKUP_BITS,
+                0,
+                K,
+            );
+            let config = SubstrMatchConfig::configure(
+                meta,
+                regex_def,
+                MAX_STRING_LEN,
+                range_config,
+                vec![substr_def1, substr_def2],
+            );
+            config
+        }
 
-//         fn synthesize(
-//             &self,
-//             config: Self::Config,
-//             mut layouter: impl Layouter<F>,
-//         ) -> Result<(), Error> {
-//             // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+"
-//             // accepted state: 22
-//             config.load(&mut layouter)?;
-//             // Starting state is 1 always
-//             // let mut states = vec![RegexCheckConfig::<F>::STATE_FIRST];
-//             // // let mut next_state = START_STATE;
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<F>,
+        ) -> Result<(), Error> {
+            // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+( and (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+)*."
+            config.load(&mut layouter)?;
+            // config.range_gate.load_lookup_table(&mut layouter)?;
+            // let mut states = vec![RegexCheckConfig::<F>::STATE_FIRST];
+            // // let mut next_state = START_STATE;
 
-//             // // Set the states to transition via the character and state that appear in the array, to the third value in each array tuple
-//             // for idx in 0..self.characters.len() {
-//             //     let character = self.characters[idx];
-//             //     // states[i] = next_state;
-//             //     let state = states[idx];
-//             //     // next_state = START_STATE; // Default to start state if no match found
-//             //     let mut is_found = false;
-//             //     for j in 0..array.len() {
-//             //         if array[j][2] == character as u64 && array[j][0] == state {
-//             //             // next_state = array[j][1] as u64;
-//             //             states.push(array[j][1]);
-//             //             is_found = true;
-//             //             break;
-//             //         }
-//             //     }
-//             //     if !is_found {
-//             //         states.push(RegexCheckConfig::<F>::STATE_FIRST);
-//             //     }
-//             // }
-//             // assert_eq!(states.len(), self.characters.len() + 1);
+            // // Set the states to transition via the character and state that appear in the array, to the third value in each array tuple
+            // for idx in 0..self.characters.len() {
+            //     let character = self.characters[idx];
+            //     // states[i] = next_state;
+            //     let state = states[idx];
+            //     // next_state = START_STATE; // Default to start state if no match found
+            //     let mut is_found = false;
+            //     for j in 0..array.len() {
+            //         if array[j][2] == character as u64 && array[j][0] == state {
+            //             // next_state = array[j][1] as u64;
+            //             states.push(array[j][1]);
+            //             is_found = true;
+            //             break;
+            //         }
+            //     }
+            //     if !is_found {
+            //         states.push(RegexCheckConfig::<F>::STATE_FIRST);
+            //     }
+            // }
+            // assert_eq!(states.len(), self.characters.len() + 1);
 
-//             print!("Synthesize being called...");
-//             let mut first_pass = SKIP_FIRST_PASS;
-//             let gate = config.gate().clone();
-//             // let mut substr_positions = self.substr_positions.to_vec();
-//             // for _ in substr_positions.len()..self.substr_def.max_length {
-//             //     substr_positions.push(0);
-//             // }
+            print!("Synthesize being called...");
+            let mut first_pass = SKIP_FIRST_PASS;
+            let gate = config.gate().clone();
+            // let mut substr_positions = self.substr_positions.to_vec();
+            // for _ in substr_positions.len()..self.substr_def.max_length {
+            //     substr_positions.push(0);
+            // }
 
-//             layouter.assign_region(
-//                 || "regex",
-//                 |region| {
-//                     if first_pass {
-//                         first_pass = false;
-//                         return Ok(());
-//                     }
-//                     let mut aux = Context::new(
-//                         region,
-//                         ContextParams {
-//                             max_rows: gate.max_rows,
-//                             num_context_ids: 1,
-//                             fixed_columns: gate.constants.clone(),
-//                         },
-//                     );
-//                     let ctx = &mut aux;
-//                     config.match_substrs(ctx, &self.characters)?;
-//                     Ok(())
-//                 },
-//             )?;
-//             Ok(())
-//         }
-//     }
+            layouter.assign_region(
+                || "regex",
+                |region| {
+                    if first_pass {
+                        first_pass = false;
+                        return Ok(());
+                    }
+                    let mut aux = Context::new(
+                        region,
+                        ContextParams {
+                            max_rows: gate.max_rows,
+                            num_context_ids: 1,
+                            fixed_columns: gate.constants.clone(),
+                        },
+                    );
+                    let ctx = &mut aux;
+                    // config.match_substrs(ctx, &self.characters)?;
+                    // config.range().finalize(ctx);
+                    Ok(())
+                },
+            )?;
+            Ok(())
+        }
+    }
 
-//     #[test]
-//     fn test_substr_pass1() {
-//         let characters: Vec<u8> = "email was meant for @y".chars().map(|c| c as u8).collect();
-//         // Make a vector of the numbers 1...24
-//         // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
-//         // assert_eq!(characters.len(), STRING_LEN);
-//         // assert_eq!(states.len(), STRING_LEN);
+    #[test]
+    fn test_substr_pass1() {
+        let characters: Vec<u8> = "email was meant for @y.".chars().map(|c| c as u8).collect();
+        // Make a vector of the numbers 1...24
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // assert_eq!(characters.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
 
-//         // Successful cases
-//         let circuit = TestSubstrMatchCircuit::<Fr> {
-//             characters,
-//             _marker: PhantomData,
-//         };
+        // Successful cases
+        let circuit = TestSubstrMatchCircuit::<Fr> {
+            characters,
+            _marker: PhantomData,
+        };
 
-//         let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
-//         prover.assert_satisfied();
-//         // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
-//         println!(
-//             "{:?}",
-//             CircuitCost::<G1, TestSubstrMatchCircuit<Fr>>::measure(
-//                 (K as u128).try_into().unwrap(),
-//                 &circuit
-//             )
-//         );
-//     }
+        let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
+        assert_eq!(prover.verify(), Ok(()));
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestSubstrMatchCircuit<Fr>>::measure(
+                (K as u128).try_into().unwrap(),
+                &circuit
+            )
+        );
+    }
 
-//     #[test]
-//     fn test_substr_pass2() {
-//         let characters: Vec<u8> = "email was meant for @yajk"
-//             .chars()
-//             .map(|c| c as u8)
-//             .collect();
-//         // Make a vector of the numbers 1...24
-//         // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
-//         // assert_eq!(characters.len(), STRING_LEN);
-//         // assert_eq!(states.len(), STRING_LEN);
+    #[test]
+    fn test_substr_pass2() {
+        let characters: Vec<u8> = "email was meant for @yajk."
+            .chars()
+            .map(|c| c as u8)
+            .collect();
+        // Make a vector of the numbers 1...24
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // assert_eq!(characters.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
 
-//         // Successful cases
-//         let circuit = TestSubstrMatchCircuit::<Fr> {
-//             characters,
-//             _marker: PhantomData,
-//         };
+        // Successful cases
+        let circuit = TestSubstrMatchCircuit::<Fr> {
+            characters,
+            _marker: PhantomData,
+        };
 
-//         let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
-//         prover.assert_satisfied();
-//         // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
-//         println!(
-//             "{:?}",
-//             CircuitCost::<G1, TestSubstrMatchCircuit<Fr>>::measure(
-//                 (K as u128).try_into().unwrap(),
-//                 &circuit
-//             )
-//         );
-//     }
+        let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
+        prover.assert_satisfied();
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestSubstrMatchCircuit<Fr>>::measure(
+                (K as u128).try_into().unwrap(),
+                &circuit
+            )
+        );
+    }
 
-//     #[test]
-//     fn test_substr_fail1() {
-//         // 1. The string does not satisfy the regex.
-//         let characters: Vec<u8> = "email was meant for @@".chars().map(|c| c as u8).collect();
+    #[test]
+    fn test_substr_fail1() {
+        // 1. The string does not satisfy the regex.
+        let characters: Vec<u8> = "email was meant for @@".chars().map(|c| c as u8).collect();
 
-//         // Make a vector of the numbers 1...24
-//         // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
-//         // assert_eq!(characters.len(), STRING_LEN);
-//         // assert_eq!(states.len(), STRING_LEN);
+        // Make a vector of the numbers 1...24
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // assert_eq!(characters.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
 
-//         // Successful cases
-//         let circuit = TestSubstrMatchCircuit::<Fr> {
-//             characters,
-//             _marker: PhantomData,
-//         };
+        // Successful cases
+        let circuit = TestSubstrMatchCircuit::<Fr> {
+            characters,
+            _marker: PhantomData,
+        };
 
-//         let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
-//         match prover.verify() {
-//             Err(_) => {
-//                 println!("Error successfully achieved!");
-//             }
-//             _ => assert!(false, "Should be error."),
-//         }
-//         // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
-//         println!(
-//             "{:?}",
-//             CircuitCost::<G1, TestSubstrMatchCircuit<Fr>>::measure(
-//                 (K as u128).try_into().unwrap(),
-//                 &circuit
-//             )
-//         );
-//     }
-// }
+        let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
+        match prover.verify() {
+            Err(_) => {
+                println!("Error successfully achieved!");
+            }
+            _ => assert!(false, "Should be error."),
+        }
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestSubstrMatchCircuit<Fr>>::measure(
+                (K as u128).try_into().unwrap(),
+                &circuit
+            )
+        );
+    }
+}
