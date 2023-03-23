@@ -198,7 +198,7 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
                         if !in_matching {
                             continue;
                         } else {
-                            substr_end = position - 1;
+                            substr_end = position;
                             break;
                         }
                     }
@@ -210,7 +210,6 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
             };
             let mut assigned_chars = Vec::new();
             // let mut assigned_len = gate.load_zero(ctx);
-            let mut last_flag = gate.load_zero(ctx);
             let assigned_start = gate.load_witness(ctx, Value::known(F::from(substr_start)));
             let assigned_end = gate.load_witness(ctx, Value::known(F::from(substr_end)));
             {
@@ -236,20 +235,20 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
                 let assigned_s = &assigned_states[position];
                 let assigned_i = &assigned_indexes[position];
                 let is_valid_flag =
-                    if position >= (substr_start as usize) && position <= (substr_end as usize) {
+                    if position >= (substr_start as usize) && position < (substr_end as usize) {
                         gate.load_witness(ctx, Value::known(F::from(1)))
                     } else {
                         gate.load_witness(ctx, Value::known(F::from(0)))
                     };
-                if position < characters.len() {
-                    println!(
-                        "position {} char {}, cur_state {}, is_valid {}",
-                        position,
-                        characters[position as usize],
-                        states[position as usize],
-                        position >= (substr_start as usize) && position <= (substr_end as usize)
-                    );
-                }
+                // if position < characters.len() {
+                //     println!(
+                //         "position {} char {}, cur_state {}, is_valid {}",
+                //         position,
+                //         characters[position as usize],
+                //         states[position as usize],
+                //         position >= (substr_start as usize) && position <= (substr_end as usize)
+                //     );
+                // }
                 {
                     // state constraints.
                     let assigned_cell = ctx.region.assign_advice(
@@ -270,7 +269,7 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
                         .constrain_equal(assigned_cell.cell(), is_valid_flag.cell())?;
                 }
                 {
-                    // When is_valid_flag == 1, start <= index <= end holds.
+                    // When is_valid_flag == 1, start <= index < end holds.
                     let range = self.range();
                     let i_less_than_start = range.is_less_than(
                         ctx,
@@ -284,16 +283,18 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
                         QuantumCell::Existing(&i_less_than_start),
                     );
                     gate.assert_is_const(ctx, &start_check, F::from(0));
-                    let end_less_than_i = range.is_less_than(
+                    let i_less_than_end = range.is_less_than(
                         ctx,
-                        QuantumCell::Existing(&assigned_end),
                         QuantumCell::Existing(&assigned_i),
+                        QuantumCell::Existing(&assigned_end),
                         64,
                     );
+                    let not_i_less_than_end =
+                        gate.not(ctx, QuantumCell::Existing(&i_less_than_end));
                     let end_check = gate.mul(
                         ctx,
                         QuantumCell::Existing(&is_valid_flag),
-                        QuantumCell::Existing(&end_less_than_i),
+                        QuantumCell::Existing(&not_i_less_than_end),
                     );
                     gate.assert_is_const(ctx, &end_check, F::from(0));
                 }
@@ -391,24 +392,16 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
                 //     QuantumCell::Existing(&assigned_len),
                 //     QuantumCell::Existing(&is_valid_flag),
                 // );
-                last_flag = is_valid_flag;
                 offset += 1;
             }
             // [TODO] Shift the assigned chars.
             let assigned_chars = self.shift_variable(ctx, &assigned_chars, &assigned_start);
             substrs_bytes.push(assigned_chars[0..substr_def.max_length].to_vec());
-            let assigned_len = {
-                let add = gate.add(
-                    ctx,
-                    QuantumCell::Existing(&assigned_end),
-                    QuantumCell::Constant(F::one()),
-                );
-                gate.sub(
-                    ctx,
-                    QuantumCell::Existing(&add),
-                    QuantumCell::Existing(&assigned_start),
-                )
-            };
+            let assigned_len = gate.sub(
+                ctx,
+                QuantumCell::Existing(&assigned_end),
+                QuantumCell::Existing(&assigned_start),
+            );
             substrs_length.push(assigned_len);
         }
         let result = AssignedSubstrsResult {
