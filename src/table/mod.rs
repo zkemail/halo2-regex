@@ -139,16 +139,12 @@ impl RegexDef {
                 })
                 .collect();
             if idx == 0 {
-                println!("first state {}", elements[0]);
                 first_state_val = elements[0];
             } else if idx == 1 {
-                println!("accepted states {:?}", elements);
                 accepted_state_vals = elements;
             } else if idx == 2 {
-                println!("largest state {}", elements[0]);
                 largest_state_val = elements[0];
             } else {
-                println!("elements {:?}", elements);
                 state_lookup.insert((elements[2] as u8, elements[0]), elements[1]);
             }
             // array.push(elements);
