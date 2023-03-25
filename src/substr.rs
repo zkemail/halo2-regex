@@ -394,7 +394,6 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
                 // );
                 offset += 1;
             }
-            // [TODO] Shift the assigned chars.
             let assigned_chars = self.shift_variable(ctx, &assigned_chars, &assigned_start);
             substrs_bytes.push(assigned_chars[0..substr_def.max_length].to_vec());
             let assigned_len = gate.sub(
@@ -639,7 +638,6 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
         const MAX_SHIFT_BITS: usize = 64;
         let gate = self.gate();
         let mut shift_value_bits = gate.num_to_bits(ctx, shift_value, MAX_SHIFT_BITS);
-        shift_value_bits.reverse();
         let mut prev_tmp = inputs.to_vec();
         let max_len = inputs.len();
         let mut new_tmp = (0..max_len)
@@ -649,7 +647,7 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
 
         for log_offset in 0..MAX_SHIFT_BITS {
             for position in 0..max_len {
-                let offset = (position + 2usize.pow(log_offset as u32)) % max_len;
+                let offset = (position + (1 << log_offset)) % max_len;
                 let value_offset = gate.select(
                     ctx,
                     QuantumCell::Existing(&prev_tmp[offset]),
@@ -658,7 +656,7 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
                 );
                 new_tmp[position] = value_offset;
             }
-            prev_tmp = new_tmp.clone();
+            prev_tmp = new_tmp.to_vec();
         }
         new_tmp
     }
@@ -697,6 +695,7 @@ mod test {
     struct TestSubstrMatchCircuit<F: PrimeField> {
         // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
         characters: Vec<u8>,
+        correct_substrs: Vec<String>,
         _marker: PhantomData<F>,
     }
 
@@ -715,6 +714,7 @@ mod test {
         fn without_witnesses(&self) -> Self {
             Self {
                 characters: vec![],
+                correct_substrs: vec![],
                 _marker: PhantomData,
             }
         }
@@ -729,7 +729,7 @@ mod test {
                 valid_state_transitions: HashSet::from([(29, 1), (1, 1)]),
             };
             let substr_def2 = SubstrDef {
-                max_length: 11,
+                max_length: 20,
                 min_position: 0,
                 max_position: MAX_STRING_LEN as u64 - 1,
                 valid_state_transitions: HashSet::from([
@@ -818,7 +818,15 @@ mod test {
                         },
                     );
                     let ctx = &mut aux;
-                    config.match_substrs(ctx, &self.characters)?;
+                    let result = config.match_substrs(ctx, &self.characters)?;
+                    for (idx, assigned_len) in result.substrs_length.iter().enumerate() {
+                        assigned_len.value().map(|v| assert_eq!(*v,F::from(self.correct_substrs[idx].len() as u64)));
+                    }
+                    for (idx, assigned_bytes) in result.substrs_bytes.iter().enumerate() {
+                        for (j, byte) in self.correct_substrs[idx].as_bytes().into_iter().enumerate() {
+                            assigned_bytes[j].value().map(|v| assert_eq!(*v, F::from(*byte as u64)));
+                        }
+                    }
                     config.range().finalize(ctx);
                     Ok(())
                 },
@@ -838,6 +846,7 @@ mod test {
         // Successful cases
         let circuit = TestSubstrMatchCircuit::<Fr> {
             characters,
+            correct_substrs: vec!["y".to_string(), "".to_string()],
             _marker: PhantomData,
         };
 
@@ -867,6 +876,7 @@ mod test {
         // Successful cases
         let circuit = TestSubstrMatchCircuit::<Fr> {
             characters,
+            correct_substrs: vec!["yajk".to_string(), "".to_string()],
             _marker: PhantomData,
         };
 
@@ -896,6 +906,7 @@ mod test {
         // Successful cases
         let circuit = TestSubstrMatchCircuit::<Fr> {
             characters,
+            correct_substrs: vec!["yajk".to_string(), "and kaiew and oiewk".to_string()],
             _marker: PhantomData,
         };
 
@@ -924,6 +935,7 @@ mod test {
         // Successful cases
         let circuit = TestSubstrMatchCircuit::<Fr> {
             characters,
+            correct_substrs: vec!["".to_string(), "".to_string()],
             _marker: PhantomData,
         };
 
