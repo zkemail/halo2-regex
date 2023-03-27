@@ -257,6 +257,7 @@ impl<F: PrimeField> RegexCheckConfig<F> {
         for (idx, char) in characters.into_iter().enumerate() {
             let state = states[idx];
             let next_state = self.regex_def.state_lookup.get(&(*char, state));
+            // println!("idx {} char {}, state {} is_none {}",idx,char,state,next_state.is_none());
             match next_state {
                 Some(s) => states.push(*s),
                 None => states.push(self.regex_def.first_state_val),

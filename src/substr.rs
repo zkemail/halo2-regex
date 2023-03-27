@@ -11,7 +11,7 @@ use halo2_base::{
     utils::{bigint_to_fe, biguint_to_fe, fe_to_biguint, modulus, PrimeField},
     AssignedValue, Context, QuantumCell,
 };
-use std::{collections::HashSet, marker::PhantomData};
+use std::{collections::HashSet, marker::PhantomData, fs::File, io::{BufReader,BufRead}};
 
 use crate::table::TransitionTableConfig;
 use crate::{AssignedRegexResult, RegexCheckConfig, RegexDef};
@@ -38,15 +38,44 @@ impl SubstrDef {
             valid_state_transitions,
         }
     }
+
+    pub fn read_from_text(file_path: &str) -> Self {
+        let file = File::open(file_path).unwrap();
+        let reader = BufReader::new(file);
+        let mut valid_state_transitions = HashSet::<(u64,u64)>::new();
+        // let mut array = Vec::new();
+        let mut max_length = 0;
+        let mut min_position = 0;
+        let mut max_position = 0;
+
+        for (idx, line) in reader.lines().enumerate() {
+            let line = line.expect(&format!("fail to get {}-th line.", idx));
+            let elements: Vec<u64> = line
+                .split_whitespace()
+                .map(|s| {
+                    s.parse()
+                        .expect(&format!("fail to parse string {} at {}-th line.", s, idx))
+                })
+                .collect();
+            if idx == 0 {
+                max_length = elements[0] as usize;
+            } else if idx == 1 {
+                min_position = elements[0];
+            } else if idx == 2 {
+                max_position = elements[0];
+            } else {
+                valid_state_transitions.insert((elements[0], elements[1]));
+            };
+        }
+        Self {
+            max_length,
+            min_position,
+            max_position,
+            valid_state_transitions,
+        }
+    } 
 }
 
-// #[derive(Debug, Clone)]
-// pub struct AssignedAllString<'a, F: PrimeField> {
-//     pub enable_flags: Vec<AssignedValue<'a, F>>,
-//     pub characters: Vec<AssignedValue<'a, F>>,
-//     pub states: Vec<AssignedValue<'a, F>>,
-//     pub indexes: Vec<AssignedValue<'a, F>>,
-// }
 
 #[derive(Debug, Clone, Default)]
 pub struct AssignedSubstrsResult<'a, F: PrimeField> {
@@ -637,7 +666,7 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
     ) -> Vec<AssignedValue<'a, F>> {
         const MAX_SHIFT_BITS: usize = 64;
         let gate = self.gate();
-        let mut shift_value_bits = gate.num_to_bits(ctx, shift_value, MAX_SHIFT_BITS);
+        let shift_value_bits = gate.num_to_bits(ctx, shift_value, MAX_SHIFT_BITS);
         let mut prev_tmp = inputs.to_vec();
         let max_len = inputs.len();
         let mut new_tmp = (0..max_len)
@@ -677,7 +706,6 @@ impl<F: PrimeField> SubstrMatchConfig<F> {
 #[cfg(test)]
 mod test {
     use halo2_base::halo2_proofs::{
-        circuit::floor_planner::V1,
         dev::{CircuitCost, FailureLocation, MockProver, VerifyFailure},
         halo2curves::bn256::{Fr, G1},
         plonk::{Any, Circuit},
@@ -720,28 +748,9 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let lookup_filepath = "./test_regexes/regex_test_lookup.txt";
-            let regex_def = RegexDef::read_from_text(lookup_filepath);
-            let substr_def1 = SubstrDef {
-                max_length: 4,
-                min_position: 0,
-                max_position: MAX_STRING_LEN as u64 - 1,
-                valid_state_transitions: HashSet::from([(29, 1), (1, 1)]),
-            };
-            let substr_def2 = SubstrDef {
-                max_length: 20,
-                min_position: 0,
-                max_position: MAX_STRING_LEN as u64 - 1,
-                valid_state_transitions: HashSet::from([
-                    (4, 8),
-                    (8, 9),
-                    (9, 10),
-                    (10, 11),
-                    (11, 12),
-                    (12, 4),
-                    (12, 12),
-                ]),
-            };
+            let regex_def = RegexDef::read_from_text( "./test_regexes/regex_test_lookup.txt");
+            let substr_def1 = SubstrDef::read_from_text("./test_regexes/substr1_test_lookup.txt");
+            let substr_def2 = SubstrDef::read_from_text("./test_regexes/substr2_test_lookup.txt");
             let range_config = RangeConfig::configure(
                 meta,
                 Vertical,
@@ -770,29 +779,6 @@ mod test {
             // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+( and (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+)*."
             config.load(&mut layouter)?;
             config.range_gate.load_lookup_table(&mut layouter)?;
-            // let mut states = vec![RegexCheckConfig::<F>::STATE_FIRST];
-            // // let mut next_state = START_STATE;
-
-            // // Set the states to transition via the character and state that appear in the array, to the third value in each array tuple
-            // for idx in 0..self.characters.len() {
-            //     let character = self.characters[idx];
-            //     // states[i] = next_state;
-            //     let state = states[idx];
-            //     // next_state = START_STATE; // Default to start state if no match found
-            //     let mut is_found = false;
-            //     for j in 0..array.len() {
-            //         if array[j][2] == character as u64 && array[j][0] == state {
-            //             // next_state = array[j][1] as u64;
-            //             states.push(array[j][1]);
-            //             is_found = true;
-            //             break;
-            //         }
-            //     }
-            //     if !is_found {
-            //         states.push(RegexCheckConfig::<F>::STATE_FIRST);
-            //     }
-            // }
-            // assert_eq!(states.len(), self.characters.len() + 1);
 
             println!("Synthesize being called...");
             let mut first_pass = SKIP_FIRST_PASS;
