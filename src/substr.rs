@@ -11,16 +11,21 @@ use halo2_base::{
     utils::{bigint_to_fe, biguint_to_fe, fe_to_biguint, modulus, PrimeField},
     AssignedValue, Context, QuantumCell,
 };
-use std::{collections::HashSet, marker::PhantomData, fs::File, io::{BufReader,BufRead}};
+use std::{
+    collections::HashSet,
+    fs::File,
+    io::{BufRead, BufReader},
+    marker::PhantomData,
+};
 
 use crate::table::TransitionTableConfig;
 use crate::{AssignedRegexResult, RegexCheckConfig, RegexDef};
 
 #[derive(Debug, Clone, Default)]
 pub struct SubstrDef {
-    max_length: usize,
-    min_position: u64,
-    max_position: u64,
+    pub max_length: usize,
+    pub min_position: u64,
+    pub max_position: u64,
     valid_state_transitions: HashSet<(u64, u64)>,
 }
 
@@ -42,7 +47,7 @@ impl SubstrDef {
     pub fn read_from_text(file_path: &str) -> Self {
         let file = File::open(file_path).unwrap();
         let reader = BufReader::new(file);
-        let mut valid_state_transitions = HashSet::<(u64,u64)>::new();
+        let mut valid_state_transitions = HashSet::<(u64, u64)>::new();
         // let mut array = Vec::new();
         let mut max_length = 0;
         let mut min_position = 0;
@@ -73,9 +78,8 @@ impl SubstrDef {
             max_position,
             valid_state_transitions,
         }
-    } 
+    }
 }
-
 
 #[derive(Debug, Clone, Default)]
 pub struct AssignedSubstrsResult<'a, F: PrimeField> {
@@ -748,7 +752,7 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let regex_def = RegexDef::read_from_text( "./test_regexes/regex_test_lookup.txt");
+            let regex_def = RegexDef::read_from_text("./test_regexes/regex_test_lookup.txt");
             let substr_def1 = SubstrDef::read_from_text("./test_regexes/substr1_test_lookup.txt");
             let substr_def2 = SubstrDef::read_from_text("./test_regexes/substr2_test_lookup.txt");
             let range_config = RangeConfig::configure(
@@ -806,11 +810,17 @@ mod test {
                     let ctx = &mut aux;
                     let result = config.match_substrs(ctx, &self.characters)?;
                     for (idx, assigned_len) in result.substrs_length.iter().enumerate() {
-                        assigned_len.value().map(|v| assert_eq!(*v,F::from(self.correct_substrs[idx].len() as u64)));
+                        assigned_len.value().map(|v| {
+                            assert_eq!(*v, F::from(self.correct_substrs[idx].len() as u64))
+                        });
                     }
                     for (idx, assigned_bytes) in result.substrs_bytes.iter().enumerate() {
-                        for (j, byte) in self.correct_substrs[idx].as_bytes().into_iter().enumerate() {
-                            assigned_bytes[j].value().map(|v| assert_eq!(*v, F::from(*byte as u64)));
+                        for (j, byte) in
+                            self.correct_substrs[idx].as_bytes().into_iter().enumerate()
+                        {
+                            assigned_bytes[j]
+                                .value()
+                                .map(|v| assert_eq!(*v, F::from(*byte as u64)));
                         }
                     }
                     config.range().finalize(ctx);
