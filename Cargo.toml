@@ -17,3 +17,7 @@ halo2-ecc = { version = "0.2.2", default-features = false, features = [
 ], git = "https://github.com/axiom-crypto/halo2-lib.git" }
 plotters = { version = "0.3.0", optional = true }
 tabbycat = { version = "0.1", features = ["attributes"], optional = true }
+
+[dev-dependencies]
+rand = "0.8.5"
+itertools = "0.10.3"

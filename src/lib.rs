@@ -99,50 +99,27 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
             ]
         });
 
-        // Lookup each transition value individually, not paying attention to bit count
+        meta.lookup("The final state must be accepted", |meta| {
+            let not_q_frist = meta.query_selector(not_q_first);
+            let cur_state = meta.query_advice(states, Rotation::cur());
+            let cur_enable = meta.query_advice(char_enable, Rotation::cur());
+            let prev_enable = meta.query_advice(char_enable, Rotation::prev());
+            let enable_change = not_q_frist.clone() * (prev_enable.clone() - cur_enable.clone());
+            vec![(enable_change * cur_state, table.accepted_states)]
+        });
+
         meta.lookup("lookup characters and their state", |meta| {
             let enable = meta.query_advice(char_enable, Rotation::cur());
             let character = meta.query_advice(characters, Rotation::cur());
             let cur_state = meta.query_advice(states, Rotation::cur());
             let next_state = meta.query_advice(states, Rotation::next());
             let substr_id = meta.query_advice(substr_ids, Rotation::cur());
-
-            // One minus q
-            let one_minus_enable = Expression::Constant(F::from(1)) - enable.clone();
-            let zero = Expression::Constant(F::from(0));
-
             vec![
-                (
-                    enable.clone() * character + one_minus_enable.clone() * zero.clone(),
-                    table.characters,
-                ),
-                (
-                    enable.clone() * cur_state + one_minus_enable.clone() * zero.clone(),
-                    table.cur_states,
-                ),
-                (
-                    enable.clone() * next_state + one_minus_enable.clone() * zero.clone(),
-                    table.next_states,
-                ),
-                (
-                    enable.clone() * substr_id + one_minus_enable.clone() * zero.clone(),
-                    table.substr_ids,
-                ),
+                (enable.clone() * character, table.characters),
+                (enable.clone() * cur_state, table.cur_states),
+                (enable.clone() * next_state, table.next_states),
+                (enable.clone() * substr_id, table.substr_ids),
             ]
-        });
-
-        meta.lookup("The final state must be accepted", |meta| {
-            let not_q_frist = meta.query_selector(not_q_first);
-            let cur_state = meta.query_advice(states, Rotation::cur());
-            let cur_enable = meta.query_advice(char_enable, Rotation::cur());
-            let prev_enable = meta.query_advice(char_enable, Rotation::prev());
-            let enable_change = not_q_frist * (prev_enable.clone() - cur_enable.clone());
-            let not_enable_change = Expression::Constant(F::from(1)) - enable_change.clone();
-            let zero = Expression::Constant(F::from(0));
-            vec![(
-                enable_change * cur_state + not_enable_change * zero,
-                table.accepted_states,
-            )]
         });
 
         Self {
@@ -302,7 +279,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
             let state = states[idx];
             let next_state = self.all_regex_def.state_lookup.get(&(*char, state));
             match next_state {
-                Some(s) => states.push(*s),
+                Some((_, s)) => states.push(*s),
                 None => states.push(self.all_regex_def.first_state_val),
             };
         }
@@ -335,7 +312,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
 mod test {
     use halo2_base::halo2_proofs::{
         dev::{CircuitCost, FailureLocation, MockProver, VerifyFailure},
-        halo2curves::bn256::{Fr, G1},
+        halo2curves::bn256::{Bn256, Fr, G1Affine, G1},
         plonk::{Any, Circuit},
     };
     use halo2_base::{gates::range::RangeStrategy::Vertical, ContextParams, SKIP_FIRST_PASS};
@@ -343,8 +320,30 @@ mod test {
     use super::*;
     use crate::defs::{AllstrRegexDef, SubstrRegexDef};
 
+    use halo2_base::halo2_proofs::plonk::{
+        create_proof, keygen_pk, keygen_vk, verify_proof, ConstraintSystem,
+    };
+    use halo2_base::halo2_proofs::poly::commitment::{Params, ParamsProver, ParamsVerifier};
+    use halo2_base::halo2_proofs::poly::kzg::commitment::{KZGCommitmentScheme, ParamsKZG};
+    use halo2_base::halo2_proofs::poly::kzg::multiopen::{ProverGWC, VerifierGWC};
+    use halo2_base::halo2_proofs::poly::kzg::strategy::SingleStrategy;
+    use halo2_base::halo2_proofs::transcript::{
+        Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
+    };
+    use rand::rngs::OsRng;
+    use std::collections::HashSet;
+    use std::marker::PhantomData;
+
+    use super::*;
+
+    use halo2_base::halo2_proofs::{
+        circuit::{floor_planner::V1, Cell, SimpleFloorPlanner},
+        plonk::{Column, Instance},
+    };
+    use itertools::Itertools;
+
     // Checks a regex of string len
-    const MAX_STRING_LEN: usize = 128;
+    const MAX_STRING_LEN: usize = 1024;
     const K: usize = 13;
 
     #[derive(Default, Clone, Debug)]
@@ -356,7 +355,7 @@ mod test {
     }
 
     impl<F: PrimeField> TestSubstrMatchCircuit<F> {
-        const NUM_ADVICE: usize = 50;
+        const NUM_ADVICE: usize = 3;
         const NUM_FIXED: usize = 1;
     }
 
@@ -406,7 +405,7 @@ mod test {
             // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+( and (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+)*."
             config.load(&mut layouter)?;
 
-            println!("Synthesize being called...");
+            // println!("Synthesize being called...");
             let mut first_pass = SKIP_FIRST_PASS;
             let gate = config.gate().clone();
             // let mut substr_positions = self.substr_positions.to_vec();
@@ -577,5 +576,54 @@ mod test {
                 &circuit
             )
         );
+    }
+
+    #[test]
+    fn test_substr_pass1_keygen_and_prove() {
+        let characters: Vec<u8> = "email was meant for @y.".chars().map(|c| c as u8).collect();
+        // Make a vector of the numbers 1...24
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // assert_eq!(characters.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
+
+        // Successful cases
+        let circuit = TestSubstrMatchCircuit::<Fr> {
+            characters,
+            correct_substrs: vec![(21, "y".to_string())],
+            _marker: PhantomData,
+        };
+        let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
+        assert_eq!(prover.verify(), Ok(()));
+
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        let params = ParamsKZG::<Bn256>::setup(K as u32, OsRng);
+        let vk = keygen_vk(&params, &circuit).unwrap();
+        let pk = keygen_pk(&params, vk.clone(), &circuit).unwrap();
+        let proof = {
+            let mut transcript = Blake2bWrite::<_, G1Affine, Challenge255<_>>::init(vec![]);
+            create_proof::<KZGCommitmentScheme<_>, ProverGWC<_>, _, _, _, _>(
+                &params,
+                &pk,
+                &[circuit.clone()],
+                &[&[]],
+                OsRng,
+                &mut transcript,
+            )
+            .unwrap();
+            transcript.finalize()
+        };
+        {
+            let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+            let verifier_params = params.verifier_params();
+            let strategy = SingleStrategy::new(&verifier_params);
+            verify_proof::<_, VerifierGWC<_>, _, _, _>(
+                verifier_params,
+                &vk,
+                strategy,
+                &[&[]],
+                &mut transcript,
+            )
+            .unwrap();
+        }
     }
 }
