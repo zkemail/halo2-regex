@@ -16,7 +16,7 @@ pub struct RegexTableConfig<F: PrimeField> {
     pub(crate) cur_states: TableColumn,
     pub(crate) next_states: TableColumn,
     pub(crate) substr_ids: TableColumn,
-    pub(crate) accepted_states: TableColumn,
+    // pub(crate) accepted_states: TableColumn,
     _marker: PhantomData<F>,
 }
 
@@ -26,14 +26,14 @@ impl<F: PrimeField> RegexTableConfig<F> {
         let cur_states = meta.lookup_table_column();
         let next_states = meta.lookup_table_column();
         let substr_ids = meta.lookup_table_column();
-        let accepted_states = meta.lookup_table_column();
+        // let accepted_states = meta.lookup_table_column();
 
         Self {
             characters,
             cur_states,
             next_states,
             substr_ids,
-            accepted_states,
+            // accepted_states,
             _marker: PhantomData,
         }
     }
@@ -102,24 +102,24 @@ impl<F: PrimeField> RegexTableConfig<F> {
                 Ok(())
             },
         )?;
-        layouter.assign_table(
-            || "accepted states",
-            |mut table| {
-                let mut offset = 0;
-                let mut accepted_state_vals = all_regex_def.accepted_state_vals.to_vec();
-                accepted_state_vals.push(dummy_state);
-                for state in accepted_state_vals.into_iter() {
-                    table.assign_cell(
-                        || format!("accepted_state at {}", offset),
-                        self.accepted_states,
-                        offset,
-                        || Value::known(F::from(state)),
-                    )?;
-                    offset += 1;
-                }
-                Ok(())
-            },
-        )?;
+        // layouter.assign_table(
+        //     || "accepted states",
+        //     |mut table| {
+        //         let mut offset = 0;
+        //         let mut accepted_state_vals = all_regex_def.accepted_state_vals.to_vec();
+        //         accepted_state_vals.push(dummy_state);
+        //         for state in accepted_state_vals.into_iter() {
+        //             table.assign_cell(
+        //                 || format!("accepted_state at {}", offset),
+        //                 self.accepted_states,
+        //                 offset,
+        //                 || Value::known(F::from(state)),
+        //             )?;
+        //             offset += 1;
+        //         }
+        //         Ok(())
+        //     },
+        // )?;
         Ok(())
     }
 }

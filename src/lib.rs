@@ -116,21 +116,23 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         });
 
         for (idx, defs) in regex_defs.iter().enumerate() {
-            meta.lookup("The final state must be accepted", |meta| {
-                let not_q_frist = meta.query_selector(not_q_first);
-                let cur_enable = meta.query_advice(char_enable, Rotation::cur());
-                let prev_enable = meta.query_advice(char_enable, Rotation::prev());
-                let enable_change =
-                    not_q_frist.clone() * (prev_enable.clone() - cur_enable.clone());
-                let not_enable_change = Expression::Constant(F::from(1)) - enable_change.clone();
-                let states = states_array[idx];
-                let cur_state = meta.query_advice(states, Rotation::cur());
-                let dummy_state_val = Expression::Constant(F::from(defs.0.largest_state_val + 1));
-                vec![(
-                    enable_change.clone() * cur_state + not_enable_change.clone() * dummy_state_val,
-                    table_array[idx].accepted_states,
-                )]
-            });
+            // meta.create_gate("The final state must be accepted", |meta| {
+            //     let not_q_frist = meta.query_selector(not_q_first);
+            //     let cur_enable = meta.query_advice(char_enable, Rotation::cur());
+            //     let prev_enable = meta.query_advice(char_enable, Rotation::prev());
+            //     let enable_change =
+            //         not_q_frist.clone() * (prev_enable.clone() - cur_enable.clone());
+            //     // let not_enable_change = Expression::Constant(F::from(1)) - enable_change.clone();
+            //     let states = states_array[idx];
+            //     let cur_state = meta.query_advice(states, Rotation::cur());
+            //     // let dummy_state_val = Expression::Constant(F::from(defs.0.largest_state_val + 1));
+            //     let accepted_state = Expression::Constant(F::from(defs.0.accepted_state_val));
+            //     // vec![(
+            //     //     enable_change.clone() * cur_state + not_enable_change.clone() * dummy_state_val,
+            //     //     table_array[idx].accepted_states,
+            //     // )]
+            //     vec![enable_change.clone() * (cur_state - accepted_state)]
+            // });
 
             meta.lookup("lookup characters and their state", |meta| {
                 let enable = meta.query_advice(char_enable, Rotation::cur());
@@ -248,12 +250,44 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                 state_values.push(Value::known(F::from(state_val)));
             }
             for (s_idx, state) in state_values.into_iter().enumerate() {
-                ctx.region.assign_advice(
+                let assigned_cell = ctx.region.assign_advice(
                     || format!("state at {} of def {}", s_idx, d_idx),
                     self.states_array[d_idx],
                     s_idx,
                     || state,
                 )?;
+                let assigned_value = self.assigned_cell2value(ctx, &assigned_cell)?;
+                let pre_flag = if s_idx == 0 {
+                    gate.load_constant(ctx, F::from(1))
+                } else {
+                    assigned_enables[s_idx - 1].clone()
+                };
+                let cur_flag = if s_idx == self.max_chars_size {
+                    gate.load_constant(ctx, F::from(0))
+                } else {
+                    assigned_enables[s_idx].clone()
+                };
+                let flag_change = gate.sub(
+                    ctx,
+                    QuantumCell::Existing(&pre_flag),
+                    QuantumCell::Existing(&cur_flag),
+                );
+                let is_state_eq = gate.is_equal(
+                    ctx,
+                    QuantumCell::Existing(&assigned_value),
+                    QuantumCell::Constant(F::from(defs.0.accepted_state_val)),
+                );
+                let is_accepted = gate.select(
+                    ctx,
+                    QuantumCell::Existing(&is_state_eq),
+                    QuantumCell::Constant(F::from(1)),
+                    QuantumCell::Existing(&flag_change),
+                );
+                gate.assert_equal(
+                    ctx,
+                    QuantumCell::Existing(&is_accepted),
+                    QuantumCell::Constant(F::from(1)),
+                );
             }
             for (s_idx, substr_id) in substr_id_values.into_iter().enumerate() {
                 let assigned_cell = ctx.region.assign_advice(
@@ -364,6 +398,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
             );
             masked_characters.push(muled);
         }
+
         let result = AssignedRegexResult {
             all_characters: assigned_characters,
             all_enable_flags: assigned_enables,
@@ -408,6 +443,10 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
             for (c_idx, char) in characters.into_iter().enumerate() {
                 let state = states[d_idx][c_idx];
                 let next_state = defs.0.state_lookup.get(&(*char, state));
+                // println!(
+                //     "d_idx {} c_idx {} char {} state {}",
+                //     d_idx, c_idx, char, state,
+                // );
                 match next_state {
                     Some((_, s)) => states[d_idx].push(*s),
                     None => panic!("The transition from {} by {} is invalid!", state, *char),
@@ -432,6 +471,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                     .get(&(*state, states[d_idx][s_idx + 1]))
                     .is_some()
                 {
+                    // println!("d_idx {} s_idx {} state {}", d_idx, s_idx, *state);
                     substr_ids[d_idx][s_idx] = d_idx + 1;
                 }
             }
@@ -502,7 +542,7 @@ mod test {
     }
 
     impl<F: PrimeField> TestSubstrMatchCircuit<F> {
-        const NUM_ADVICE: usize = 5;
+        const NUM_ADVICE: usize = 20;
         const NUM_FIXED: usize = 1;
     }
 

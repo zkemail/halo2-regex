@@ -16,7 +16,7 @@ use std::io::{BufRead, BufReader};
 pub struct AllstrRegexDef {
     pub state_lookup: HashMap<(u8, u64), (usize, u64)>,
     pub first_state_val: u64,
-    pub accepted_state_vals: Vec<u64>,
+    pub accepted_state_val: u64, // support only one accepted state.
     pub largest_state_val: u64,
 }
 
@@ -27,7 +27,7 @@ impl AllstrRegexDef {
         let mut state_lookup = HashMap::<(u8, u64), (usize, u64)>::new();
         // let mut array = Vec::new();
         let mut first_state_val = 0;
-        let mut accepted_state_vals = Vec::new();
+        let mut accepted_state_val = 0;
         let mut largest_state_val = 0;
 
         for (idx, line) in reader.lines().enumerate() {
@@ -42,7 +42,7 @@ impl AllstrRegexDef {
             if idx == 0 {
                 first_state_val = elements[0];
             } else if idx == 1 {
-                accepted_state_vals = elements;
+                accepted_state_val = elements[0];
             } else if idx == 2 {
                 largest_state_val = elements[0];
             } else {
@@ -53,7 +53,7 @@ impl AllstrRegexDef {
         Self {
             state_lookup,
             first_state_val,
-            accepted_state_vals,
+            accepted_state_val,
             largest_state_val,
         }
     }
