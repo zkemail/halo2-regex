@@ -13,6 +13,12 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 #[derive(Debug, Clone, Default)]
+pub struct RegexDefs {
+    pub allstr: AllstrRegexDef,
+    pub substrs: Vec<SubstrRegexDef>,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct AllstrRegexDef {
     pub state_lookup: HashMap<(u8, u64), (usize, u64)>,
     pub first_state_val: u64,

@@ -8,7 +8,7 @@ use halo2_base::utils::PrimeField;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-use crate::defs::{AllstrRegexDef, SubstrRegexDef};
+use crate::defs::{AllstrRegexDef, RegexDefs, SubstrRegexDef};
 
 #[derive(Debug, Clone)]
 pub struct RegexTableConfig<F: PrimeField> {
@@ -41,11 +41,10 @@ impl<F: PrimeField> RegexTableConfig<F> {
     pub fn load(
         &self,
         layouter: &mut impl Layouter<F>,
-        all_regex_def: &AllstrRegexDef,
-        sub_regex_def: &SubstrRegexDef,
-        substr_id: usize,
-    ) -> Result<(), Error> {
-        let dummy_state = all_regex_def.largest_state_val + 1;
+        regex_defs: &RegexDefs,
+        substr_id_offset: usize,
+    ) -> Result<usize, Error> {
+        let dummy_state = regex_defs.allstr.largest_state_val + 1;
         layouter.assign_table(
             || "load transition table",
             |mut table| {
@@ -83,21 +82,33 @@ impl<F: PrimeField> RegexTableConfig<F> {
                 // Append a dummy row [0, 0, 0, 0].
                 assign_row(0, dummy_state, dummy_state, 0)?;
                 // [IMPORTANT] We must sort the keys of `state_lookup`. Otherwise, its order is variable, which derives different verifying key for each setup.
-                let mut lookups = all_regex_def
+                let mut lookups = regex_defs
+                    .allstr
                     .state_lookup
                     .iter()
                     .collect::<Vec<(&(u8, u64), &(usize, u64))>>();
                 lookups.sort_by(|a, b| a.1 .0.cmp(&b.1 .0));
                 for ((char, cur_state), (idx, next_state)) in lookups.into_iter() {
-                    if sub_regex_def
-                        .valid_state_transitions
-                        .get(&(*cur_state, *next_state))
-                        .is_some()
-                    {
-                        assign_row(*char, *cur_state, *next_state, substr_id)?;
-                    } else {
-                        assign_row(*char, *cur_state, *next_state, 0)?;
+                    let mut substr_id = 0;
+                    for (j, substr_def) in regex_defs.substrs.iter().enumerate() {
+                        if substr_def
+                            .valid_state_transitions
+                            .get(&(*cur_state, *next_state))
+                            .is_some()
+                        {
+                            substr_id = substr_id_offset + j;
+                        }
                     }
+                    assign_row(*char, *cur_state, *next_state, substr_id)?;
+                    // if sub_regex_def
+                    //     .valid_state_transitions
+                    //     .get(&(*cur_state, *next_state))
+                    //     .is_some()
+                    // {
+                    //     assign_row(*char, *cur_state, *next_state, substr_id)?;
+                    // } else {
+                    //     assign_row(*char, *cur_state, *next_state, 0)?;
+                    // }
                 }
                 Ok(())
             },
@@ -120,6 +131,7 @@ impl<F: PrimeField> RegexTableConfig<F> {
         //         Ok(())
         //     },
         // )?;
-        Ok(())
+
+        Ok(substr_id_offset + regex_defs.substrs.len())
     }
 }

@@ -28,7 +28,7 @@ use std::{
 };
 
 use crate::table::RegexTableConfig;
-use crate::{AllstrRegexDef, SubstrRegexDef};
+use crate::{AllstrRegexDef, RegexDefs, SubstrRegexDef};
 #[derive(Debug, Clone, Default)]
 pub struct AssignedRegexResult<'a, F: PrimeField> {
     pub all_enable_flags: Vec<AssignedValue<'a, F>>,
@@ -49,7 +49,7 @@ pub struct RegexVerifyConfig<F: PrimeField> {
     not_q_first: Selector,
     max_chars_size: usize,
     gate: FlexGateConfig<F>,
-    pub regex_defs: Vec<(AllstrRegexDef, SubstrRegexDef)>,
+    pub regex_defs: Vec<RegexDefs>,
 }
 
 impl<F: PrimeField> RegexVerifyConfig<F> {
@@ -57,7 +57,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         meta: &mut ConstraintSystem<F>,
         max_chars_size: usize,
         gate: FlexGateConfig<F>,
-        regex_defs: Vec<(AllstrRegexDef, SubstrRegexDef)>,
+        regex_defs: Vec<RegexDefs>,
     ) -> Self {
         let num_regex_def = regex_defs.len();
         let characters = meta.advice_column();
@@ -96,7 +96,9 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                     q_frist.clone()
                         * cur_enable.clone()
                         * (cur_state
-                            - Expression::Constant(F::from(regex_defs[idx].0.first_state_val))),
+                            - Expression::Constant(F::from(
+                                regex_defs[idx].allstr.first_state_val,
+                            ))),
                 );
             }
             constraints
@@ -143,7 +145,8 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                 let cur_state = meta.query_advice(states, Rotation::cur());
                 let next_state = meta.query_advice(states, Rotation::next());
                 let substr_id = meta.query_advice(substr_ids, Rotation::cur());
-                let dummy_state_val = Expression::Constant(F::from(defs.0.largest_state_val + 1));
+                let dummy_state_val =
+                    Expression::Constant(F::from(defs.allstr.largest_state_val + 1));
                 vec![
                     (
                         enable.clone() * character.clone(),
@@ -245,7 +248,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                 let state_val = if idx == characters.len() {
                     states[d_idx][idx]
                 } else {
-                    defs.0.largest_state_val + 1
+                    defs.allstr.largest_state_val + 1
                 };
                 state_values.push(Value::known(F::from(state_val)));
             }
@@ -275,7 +278,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                 let is_state_eq = gate.is_equal(
                     ctx,
                     QuantumCell::Existing(&assigned_value),
-                    QuantumCell::Constant(F::from(defs.0.accepted_state_val)),
+                    QuantumCell::Constant(F::from(defs.allstr.accepted_state_val)),
                 );
                 let is_accepted = gate.select(
                     ctx,
@@ -304,87 +307,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                 );
             }
         }
-
-        // for ((char, state), substr_id) in characters
-        //     .iter()
-        //     .zip(states[0..characters.len()].iter())
-        //     .zip(substr_ids.iter())
-        // {
-        //     enable_values.push(Value::known(F::from(1)));
-        //     character_values.push(Value::known(F::from(*char as u64)));
-        //     for (state, substr_id) in states.iter().zip(substr_ids.iter()) {
-        //         state_values.push(Value::known(F::from(*state)));
-        //         substr_id_values.push(Value::known(F::from(*substr_id as u64)));
-        //     }
-        // }
-        // for _ in characters.len()..self.max_chars_size {
-        //     enable_values.push(Value::known(F::from(0)));
-        //     character_values.push(Value::known(F::from(0)));
-        //     substr_id_values.push(Value::known(F::from(0)));
-        // }
-        // for idx in characters.len()..self.max_chars_size + 1 {
-        //     let state_val = if idx == characters.len() {
-        //         states[idx]
-        //     } else {
-        //         0
-        //     };
-        //     state_values.push(Value::known(F::from(state_val)));
-        // }
-        // let assigned_enables = enable_values
-        //     .into_iter()
-        //     .enumerate()
-        //     .map(|(idx, val)| {
-        //         let assigned = ctx.region.assign_advice(
-        //             || format!("enable at {}", idx),
-        //             self.char_enable,
-        //             idx,
-        //             || val,
-        //         )?;
-        //         self.assigned_cell2value(ctx, &assigned)
-        //     })
-        //     .collect::<Result<Vec<AssignedValue<F>>, Error>>()?;
-        // let assigned_characters = character_values
-        //     .into_iter()
-        //     .enumerate()
-        //     .map(|(idx, val)| {
-        //         let assigned = ctx.region.assign_advice(
-        //             || format!("character at {}", idx),
-        //             self.characters,
-        //             idx,
-        //             || val,
-        //         )?;
-        //         self.assigned_cell2value(ctx, &assigned)
-        //     })
-        //     .collect::<Result<Vec<AssignedValue<F>>, Error>>()?;
-        // let assigned_states = state_values
-        //     .into_iter()
-        //     .enumerate()
-        //     .map(|(idx, val)| {
-        //         let assigned = ctx.region.assign_advice(
-        //             || format!("state at {}", idx),
-        //             self.states,
-        //             idx,
-        //             || val,
-        //         )?;
-        //         self.assigned_cell2value(ctx, &assigned)
-        //     })
-        //     .collect::<Result<Vec<AssignedValue<F>>, Error>>()?;
-        // let assigned_substr_ids = substr_id_values
-        //     .into_iter()
-        //     .enumerate()
-        //     .map(|(idx, val)| {
-        //         let assigned = ctx.region.assign_advice(
-        //             || format!("substr_id at {}", idx),
-        //             self.substr_ids,
-        //             idx,
-        //             || val,
-        //         )?;
-        //         self.assigned_cell2value(ctx, &assigned)
-        //     })
-        //     .collect::<Result<Vec<AssignedValue<F>>, Error>>()?;
         debug_assert_eq!(assigned_enables.len(), assigned_characters.len());
-        // debug_assert_eq!(assigned_characters.len() + 1, assigned_states.len());
-        // debug_assert_eq!(assigned_characters.len(), assigned_substr_ids.len());
 
         let mut masked_characters = Vec::new();
         let gate = self.gate();
@@ -409,13 +332,9 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
     }
 
     pub fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+        let mut substr_id_offset = 1;
         for (idx, table) in self.table_array.iter().enumerate() {
-            table.load(
-                layouter,
-                &self.regex_defs[idx].0,
-                &self.regex_defs[idx].1,
-                idx + 1,
-            )?;
+            substr_id_offset = table.load(layouter, &self.regex_defs[idx], substr_id_offset)?;
         }
         Ok(())
     }
@@ -439,10 +358,10 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
     pub(crate) fn derive_states(&self, characters: &[u8]) -> Vec<Vec<u64>> {
         let mut states = vec![];
         for (d_idx, defs) in self.regex_defs.iter().enumerate() {
-            states.push(vec![defs.0.first_state_val]);
+            states.push(vec![defs.allstr.first_state_val]);
             for (c_idx, char) in characters.into_iter().enumerate() {
                 let state = states[d_idx][c_idx];
-                let next_state = defs.0.state_lookup.get(&(*char, state));
+                let next_state = defs.allstr.state_lookup.get(&(*char, state));
                 // println!(
                 //     "d_idx {} c_idx {} char {} state {}",
                 //     d_idx, c_idx, char, state,
@@ -458,23 +377,35 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
     }
 
     pub(crate) fn derive_substr_ids(&self, states: &[Vec<u64>]) -> Vec<Vec<usize>> {
-        let mut substr_ids = vec![];
+        let mut substr_ids: Vec<Vec<usize>> = vec![];
+        let mut substr_id_offset = 1;
         for (d_idx, defs) in self.regex_defs.iter().enumerate() {
             substr_ids.push(vec![0; states[d_idx].len()]);
             for (s_idx, state) in states[d_idx].iter().enumerate() {
                 if s_idx == states[d_idx].len() - 1 {
                     break;
                 }
-                if defs
-                    .1
-                    .valid_state_transitions
-                    .get(&(*state, states[d_idx][s_idx + 1]))
-                    .is_some()
-                {
-                    // println!("d_idx {} s_idx {} state {}", d_idx, s_idx, *state);
-                    substr_ids[d_idx][s_idx] = d_idx + 1;
+                for (substr_idx, substr_def) in defs.substrs.iter().enumerate() {
+                    if substr_def
+                        .valid_state_transitions
+                        .get(&(*state, states[d_idx][s_idx + 1]))
+                        .is_some()
+                    {
+                        substr_ids[d_idx][s_idx] = substr_id_offset + substr_idx;
+                        break;
+                    }
                 }
+                // if defs
+                //     .1
+                //     .valid_state_transitions
+                //     .get(&(*state, states[d_idx][s_idx + 1]))
+                //     .is_some()
+                // {
+                //     // println!("d_idx {} s_idx {} state {}", d_idx, s_idx, *state);
+                //     substr_ids[d_idx][s_idx] = d_idx + 1;
+                // }
             }
+            substr_id_offset += defs.substrs.len();
         }
         // for (idx, state) in states.into_iter().enumerate() {
         //     if idx == states.len() - 1 {
@@ -578,12 +509,17 @@ mod test {
                 0,
                 K,
             );
-            let config = RegexVerifyConfig::configure(
-                meta,
-                MAX_STRING_LEN,
-                gate,
-                vec![(all_regex_def1, substr_def1), (all_regex_def2, substr_def2)],
-            );
+            let regex_defs = vec![
+                RegexDefs {
+                    allstr: all_regex_def1,
+                    substrs: vec![substr_def1],
+                },
+                RegexDefs {
+                    allstr: all_regex_def2,
+                    substrs: vec![substr_def2],
+                },
+            ];
+            let config = RegexVerifyConfig::configure(meta, MAX_STRING_LEN, gate, regex_defs);
             config
         }
 
