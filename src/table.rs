@@ -16,6 +16,9 @@ pub struct RegexTableConfig<F: PrimeField> {
     pub(crate) cur_states: TableColumn,
     pub(crate) next_states: TableColumn,
     pub(crate) substr_ids: TableColumn,
+    pub(crate) endpoints_substr_ids: TableColumn,
+    pub(crate) start_states: TableColumn,
+    pub(crate) end_states: TableColumn,
     // pub(crate) accepted_states: TableColumn,
     _marker: PhantomData<F>,
 }
@@ -26,6 +29,9 @@ impl<F: PrimeField> RegexTableConfig<F> {
         let cur_states = meta.lookup_table_column();
         let next_states = meta.lookup_table_column();
         let substr_ids = meta.lookup_table_column();
+        let endpoints_substr_ids = meta.lookup_table_column();
+        let start_states = meta.lookup_table_column();
+        let end_states = meta.lookup_table_column();
         // let accepted_states = meta.lookup_table_column();
 
         Self {
@@ -33,6 +39,9 @@ impl<F: PrimeField> RegexTableConfig<F> {
             cur_states,
             next_states,
             substr_ids,
+            endpoints_substr_ids,
+            start_states,
+            end_states,
             // accepted_states,
             _marker: PhantomData,
         }
@@ -79,7 +88,7 @@ impl<F: PrimeField> RegexTableConfig<F> {
                         Ok::<(), Error>(())
                     };
                 // let mut array = lookups.to_vec();
-                // Append a dummy row [0, 0, 0, 0].
+                // Append a dummy row [0, dummy_state, dummy_state, 0, 0].
                 assign_row(0, dummy_state, dummy_state, 0)?;
                 // [IMPORTANT] We must sort the keys of `state_lookup`. Otherwise, its order is variable, which derives different verifying key for each setup.
                 let mut lookups = regex_defs
@@ -88,6 +97,7 @@ impl<F: PrimeField> RegexTableConfig<F> {
                     .iter()
                     .collect::<Vec<(&(u8, u64), &(usize, u64))>>();
                 lookups.sort_by(|a, b| a.1 .0.cmp(&b.1 .0));
+                let num_lookup = lookups.len();
                 for ((char, cur_state), (idx, next_state)) in lookups.into_iter() {
                     let mut substr_id = 0;
                     for (j, substr_def) in regex_defs.substrs.iter().enumerate() {
@@ -97,18 +107,58 @@ impl<F: PrimeField> RegexTableConfig<F> {
                             .is_some()
                         {
                             substr_id = substr_id_offset + j;
+                            break;
                         }
                     }
                     assign_row(*char, *cur_state, *next_state, substr_id)?;
-                    // if sub_regex_def
-                    //     .valid_state_transitions
-                    //     .get(&(*cur_state, *next_state))
-                    //     .is_some()
-                    // {
-                    //     assign_row(*char, *cur_state, *next_state, substr_id)?;
-                    // } else {
-                    //     assign_row(*char, *cur_state, *next_state, 0)?;
-                    // }
+                }
+                Ok(())
+            },
+        )?;
+        layouter.assign_table(
+            || "endpoint states",
+            |mut table| {
+                let mut offset = 0;
+                table.assign_cell(
+                    || format!("endpoints_substr_ids at {}", offset),
+                    self.endpoints_substr_ids,
+                    offset,
+                    || Value::known(F::from(0 as u64)),
+                )?;
+                table.assign_cell(
+                    || format!("start_states at {}", offset),
+                    self.start_states,
+                    offset,
+                    || Value::known(F::from(dummy_state as u64)),
+                )?;
+                table.assign_cell(
+                    || format!("end_states at {}", offset),
+                    self.end_states,
+                    offset,
+                    || Value::known(F::from(dummy_state as u64)),
+                )?;
+                offset += 1;
+                for (idx, substr_def) in regex_defs.substrs.iter().enumerate() {
+                    let substr_id = substr_id_offset + idx;
+                    table.assign_cell(
+                        || format!("endpoints_substr_ids at {}", offset),
+                        self.endpoints_substr_ids,
+                        offset,
+                        || Value::known(F::from(substr_id as u64)),
+                    )?;
+                    table.assign_cell(
+                        || format!("start_states at {}", offset),
+                        self.start_states,
+                        offset,
+                        || Value::known(F::from(substr_def.start_state as u64)),
+                    )?;
+                    table.assign_cell(
+                        || format!("end_states at {}", offset),
+                        self.end_states,
+                        offset,
+                        || Value::known(F::from(substr_def.end_state as u64)),
+                    )?;
+                    offset += 1;
                 }
                 Ok(())
             },

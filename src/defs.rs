@@ -71,6 +71,8 @@ pub struct SubstrRegexDef {
     pub min_position: u64,
     pub max_position: u64,
     pub valid_state_transitions: HashSet<(u64, u64)>,
+    pub start_state: u64,
+    pub end_state: u64,
 }
 
 impl SubstrRegexDef {
@@ -79,12 +81,16 @@ impl SubstrRegexDef {
         min_position: u64,
         max_position: u64,
         valid_state_transitions: HashSet<(u64, u64)>,
+        start_state: u64,
+        end_state: u64,
     ) -> Self {
         Self {
             max_length,
             min_position,
             max_position,
             valid_state_transitions,
+            start_state,
+            end_state,
         }
     }
 
@@ -95,6 +101,8 @@ impl SubstrRegexDef {
         let mut max_length = 0;
         let mut min_position = 0;
         let mut max_position = 0;
+        let mut start_state = 0;
+        let mut end_state = 0;
 
         for (idx, line) in reader.lines().enumerate() {
             let line = line.expect(&format!("fail to get {}-th line.", idx));
@@ -111,6 +119,10 @@ impl SubstrRegexDef {
                 min_position = elements[0];
             } else if idx == 2 {
                 max_position = elements[0];
+            } else if idx == 3 {
+                start_state = elements[0];
+            } else if idx == 4 {
+                end_state = elements[0];
             } else {
                 valid_state_transitions.insert((elements[0], elements[1]));
             };
@@ -120,6 +132,8 @@ impl SubstrRegexDef {
             min_position,
             max_position,
             valid_state_transitions,
+            start_state,
+            end_state,
         }
     }
 }
