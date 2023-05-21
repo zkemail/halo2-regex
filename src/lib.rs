@@ -1081,9 +1081,9 @@ mod test {
 
     #[derive(Default, Clone, Debug)]
     struct TestCircuit2<F: PrimeField> {
-        // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
         characters: Vec<u8>,
         correct_substrs: Vec<(usize, String)>,
+        is_success: bool,
         _marker: PhantomData<F>,
     }
 
@@ -1101,6 +1101,7 @@ mod test {
             Self {
                 characters: vec![],
                 correct_substrs: vec![],
+                is_success: false,
                 _marker: PhantomData,
             }
         }
@@ -1162,19 +1163,22 @@ mod test {
                     let mut expected_masked_chars = vec![0; MAX_STRING_LEN];
                     let mut expected_substr_ids = vec![0; MAX_STRING_LEN];
 
-                    for (substr_idx, (start, chars)) in self.correct_substrs.iter().enumerate() {
-                        for (idx, char) in chars.as_bytes().iter().enumerate() {
-                            expected_masked_chars[start + idx] = *char;
-                            expected_substr_ids[start + idx] = substr_idx + 1;
+                    if self.is_success {
+                        for (substr_idx, (start, chars)) in self.correct_substrs.iter().enumerate()
+                        {
+                            for (idx, char) in chars.as_bytes().iter().enumerate() {
+                                expected_masked_chars[start + idx] = *char;
+                                expected_substr_ids[start + idx] = substr_idx + 1;
+                            }
                         }
-                    }
-                    for idx in 0..MAX_STRING_LEN {
-                        result.masked_characters[idx]
-                            .value()
-                            .map(|v| assert_eq!(*v, F::from(expected_masked_chars[idx] as u64)));
-                        result.all_substr_ids[idx]
-                            .value()
-                            .map(|v| assert_eq!(*v, F::from(expected_substr_ids[idx] as u64)));
+                        for idx in 0..MAX_STRING_LEN {
+                            result.masked_characters[idx].value().map(|v| {
+                                assert_eq!(*v, F::from(expected_masked_chars[idx] as u64))
+                            });
+                            result.all_substr_ids[idx]
+                                .value()
+                                .map(|v| assert_eq!(*v, F::from(expected_substr_ids[idx] as u64)));
+                        }
                     }
                     Ok(())
                 },
@@ -1207,6 +1211,7 @@ mod test {
         let circuit = TestCircuit2::<Fr> {
             characters,
             correct_substrs: vec![(5, "alice@gmail.com".to_string())],
+            is_success: true,
             _marker: PhantomData,
         };
 
@@ -1243,11 +1248,138 @@ mod test {
         let circuit = TestCircuit2::<Fr> {
             characters,
             correct_substrs: vec![(11, "alice@gmail.com".to_string())],
+            is_success: true,
             _marker: PhantomData,
         };
 
         let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestCircuit2<Fr>>::measure((K as u128).try_into().unwrap(), &circuit)
+        );
+    }
+
+    #[test]
+    fn test_substr_fail2() {
+        let regex_decomposed: DecomposedRegexConfig =
+            serde_json::from_reader(File::open("./test_regexes/regex3_test.json").unwrap())
+                .unwrap();
+        regex_decomposed
+            .gen_regex_files(
+                &Path::new("./test_regexes/regex3_test_lookup.txt").to_path_buf(),
+                &[Path::new("./test_regexes/substr3_test_lookup.txt").to_path_buf()],
+            )
+            .unwrap();
+        let characters: Vec<u8> = "from:alice<alicegmail.com>\r\n"
+            .chars()
+            .map(|c| c as u8)
+            .collect();
+        // Make a vector of the numbers 1...24
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // assert_eq!(characters.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
+
+        // Successful cases
+        let circuit = TestCircuit2::<Fr> {
+            characters,
+            correct_substrs: vec![],
+            is_success: false,
+            _marker: PhantomData,
+        };
+
+        let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
+        match prover.verify() {
+            Err(_) => {
+                println!("Error successfully achieved!");
+            }
+            _ => panic!("Should be error."),
+        }
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestCircuit2<Fr>>::measure((K as u128).try_into().unwrap(), &circuit)
+        );
+    }
+
+    #[test]
+    fn test_substr_fail3() {
+        let regex_decomposed: DecomposedRegexConfig =
+            serde_json::from_reader(File::open("./test_regexes/regex3_test.json").unwrap())
+                .unwrap();
+        regex_decomposed
+            .gen_regex_files(
+                &Path::new("./test_regexes/regex3_test_lookup.txt").to_path_buf(),
+                &[Path::new("./test_regexes/substr3_test_lookup.txt").to_path_buf()],
+            )
+            .unwrap();
+        let characters: Vec<u8> = "from:alice<alice@gmail.com>"
+            .chars()
+            .map(|c| c as u8)
+            .collect();
+        // Make a vector of the numbers 1...24
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // assert_eq!(characters.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
+
+        // Successful cases
+        let circuit = TestCircuit2::<Fr> {
+            characters,
+            correct_substrs: vec![],
+            is_success: false,
+            _marker: PhantomData,
+        };
+
+        let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
+        match prover.verify() {
+            Err(_) => {
+                println!("Error successfully achieved!");
+            }
+            _ => panic!("Should be error."),
+        }
+        // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
+        println!(
+            "{:?}",
+            CircuitCost::<G1, TestCircuit2<Fr>>::measure((K as u128).try_into().unwrap(), &circuit)
+        );
+    }
+
+    #[test]
+    fn test_substr_fail4() {
+        let regex_decomposed: DecomposedRegexConfig =
+            serde_json::from_reader(File::open("./test_regexes/regex3_test.json").unwrap())
+                .unwrap();
+        regex_decomposed
+            .gen_regex_files(
+                &Path::new("./test_regexes/regex3_test_lookup.txt").to_path_buf(),
+                &[Path::new("./test_regexes/substr3_test_lookup.txt").to_path_buf()],
+            )
+            .unwrap();
+        let characters: Vec<u8> = "fromalice<alice@gmail.com>\r\n"
+            .chars()
+            .map(|c| c as u8)
+            .collect();
+        // Make a vector of the numbers 1...24
+        // let states = (1..=STRING_LEN as u128).collect::<Vec<u128>>();
+        // assert_eq!(characters.len(), STRING_LEN);
+        // assert_eq!(states.len(), STRING_LEN);
+
+        // Successful cases
+        let circuit = TestCircuit2::<Fr> {
+            characters,
+            correct_substrs: vec![],
+            is_success: false,
+            _marker: PhantomData,
+        };
+
+        let prover = MockProver::run(K as u32, &circuit, vec![]).unwrap();
+        match prover.verify() {
+            Err(_) => {
+                println!("Error successfully achieved!");
+            }
+            _ => panic!("Should be error."),
+        }
         // CircuitCost::<Eq, RegexCheckCircuit<Fp>>::measure((k as u128).try_into().unwrap(), &circuit)
         println!(
             "{:?}",
