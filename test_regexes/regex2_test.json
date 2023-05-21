@@ -1,0 +1,23 @@
+{
+    "max_byte_size": 128,
+    "parts": [
+        {
+            "is_public": false,
+            "regex_def": " Also for ",
+            "max_size": 21
+        },
+        {
+            "is_public": true,
+            "regex_def": "(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+",
+            "max_size": 20,
+            "solidity": {
+                "type": "String"
+            }
+        },
+        {
+            "is_public": false,
+            "regex_def": ".",
+            "max_size": 1
+        }
+    ]
+}

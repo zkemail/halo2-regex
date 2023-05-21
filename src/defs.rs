@@ -98,11 +98,11 @@ impl SubstrRegexDef {
         let file = File::open(file_path).unwrap();
         let reader = BufReader::new(file);
         let mut valid_state_transitions = HashSet::<(u64, u64)>::new();
+        let mut one_state_path = HashMap::<u64, u64>::new();
         let mut max_length = 0;
         let mut min_position = 0;
         let mut max_position = 0;
         let mut start_state = u64::MAX;
-        let mut end_state = 0;
 
         for (idx, line) in reader.lines().enumerate() {
             let line = line.expect(&format!("fail to get {}-th line.", idx));
@@ -123,13 +123,20 @@ impl SubstrRegexDef {
                 valid_state_transitions.insert((elements[0], elements[1]));
                 if elements[0] < start_state {
                     start_state = elements[0];
-                    end_state = elements[1];
                 }
-                if elements[0] == end_state {
-                    end_state = elements[1];
+                if one_state_path.get(&elements[0]).is_none() && elements[0] != elements[1] {
+                    one_state_path.insert(elements[0], elements[1]);
                 }
             };
         }
+        let mut end_state = start_state;
+        while let Some(next_state) = one_state_path.get(&end_state) {
+            end_state = *next_state;
+        }
+        // println!(
+        //     "start_state {} end_state {} valid transition {:?}",
+        //     start_state, end_state, valid_state_transitions
+        // );
 
         Self {
             max_length,

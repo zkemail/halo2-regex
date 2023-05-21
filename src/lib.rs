@@ -236,6 +236,16 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         let states = self.derive_states(characters);
         let substr_ids = self.derive_substr_ids(states.as_slice());
         let (is_starts, is_ends) = self.derive_is_start_end(&states, &substr_ids);
+        // for idx in 0..characters.len() {
+        //     println!(
+        //         "char {}, state {}, substr_id {}, is_start {}, is_end {}",
+        //         characters[idx] as char,
+        //         states[0][idx],
+        //         substr_ids[0][idx],
+        //         is_starts[0][idx],
+        //         is_ends[0][idx]
+        //     );
+        // }
 
         self.q_first.enable(&mut ctx.region, 0)?;
         for idx in 1..self.max_chars_size {
@@ -716,7 +726,10 @@ mod test {
     use halo2_base::{gates::range::RangeStrategy::Vertical, ContextParams, SKIP_FIRST_PASS};
 
     use super::*;
-    use crate::defs::{AllstrRegexDef, SubstrRegexDef};
+    use crate::{
+        defs::{AllstrRegexDef, SubstrRegexDef},
+        vrm::DecomposedRegexConfig,
+    };
 
     use halo2_base::halo2_proofs::plonk::{
         create_proof, keygen_pk, keygen_vk, verify_proof, ConstraintSystem,
@@ -729,8 +742,8 @@ mod test {
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     };
     use rand::rngs::OsRng;
-    use std::collections::HashSet;
     use std::marker::PhantomData;
+    use std::{collections::HashSet, path::Path};
 
     use super::*;
 
@@ -771,10 +784,28 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+            let regex1_decomposed: DecomposedRegexConfig =
+                serde_json::from_reader(File::open("./test_regexes/regex1_test.json").unwrap())
+                    .unwrap();
+            regex1_decomposed
+                .gen_regex_files(
+                    &Path::new("./test_regexes/regex1_test_lookup.txt").to_path_buf(),
+                    &[Path::new("./test_regexes/substr1_test_lookup.txt").to_path_buf()],
+                )
+                .unwrap();
             let all_regex_def1 =
                 AllstrRegexDef::read_from_text("./test_regexes/regex1_test_lookup.txt");
             let substr_def1 =
                 SubstrRegexDef::read_from_text("./test_regexes/substr1_test_lookup.txt");
+            let regex2_decomposed: DecomposedRegexConfig =
+                serde_json::from_reader(File::open("./test_regexes/regex2_test.json").unwrap())
+                    .unwrap();
+            regex2_decomposed
+                .gen_regex_files(
+                    &Path::new("./test_regexes/regex2_test_lookup.txt").to_path_buf(),
+                    &[Path::new("./test_regexes/substr2_test_lookup.txt").to_path_buf()],
+                )
+                .unwrap();
             let all_regex_def2 =
                 AllstrRegexDef::read_from_text("./test_regexes/regex2_test_lookup.txt");
             let substr_def2 =

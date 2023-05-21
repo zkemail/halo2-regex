@@ -59,16 +59,16 @@ impl DecomposedRegexConfig {
         substr_file_pathes: &[PathBuf],
     ) -> Result<(), VrmError> {
         let catch_all = catch_all_regex_str()?;
-        let text_context_prefix = text_context_prefix_regex_str()?;
+        // let text_context_prefix = text_context_prefix_regex_str()?;
         let first_part = RegexPartConfig {
             is_public: false,
-            regex_def: "(".to_string() + catch_all.as_str() + "+)?" + &text_context_prefix,
+            regex_def: "(".to_string() + catch_all.as_str() + "+)?",
             max_size: self.max_byte_size,
             solidity: None,
         };
         let last_part = RegexPartConfig {
             is_public: false,
-            regex_def: "\r\n(".to_string() + catch_all.as_str() + "+)?",
+            regex_def: "(".to_string() + catch_all.as_str() + "+)?",
             max_size: self.max_byte_size,
             solidity: None,
         };
