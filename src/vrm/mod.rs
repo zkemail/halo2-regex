@@ -92,22 +92,31 @@ impl DecomposedRegexConfig {
         add_graph_nodes(&dfa_val, &mut graph, None, max_state)?;
         let accepted_state = get_accepted_state(&dfa_val).ok_or(JsCallerError::NoAcceptedState)?;
 
-        let mut remove_edges = HashSet::new();
-        graph.visit_all_cycles(|g, cycle_nodes| {
-            if cycle_nodes.len() == 1 {
-                return;
-            }
-            // println!("cycles {:?}", cycle_nodes);
-            let n = cycle_nodes.len();
-            let e = g.find_edge(cycle_nodes[n - 1], cycle_nodes[0]).unwrap();
-            remove_edges.insert(e);
-        });
+        // let mut remove_edges = HashSet::new();
+        // graph.visit_all_cycles(|g, cycle_nodes| {
+        //     if cycle_nodes.len() == 1 {
+        //         return;
+        //     }
+        //     // println!("cycles {:?}", cycle_nodes);
+        //     let n = cycle_nodes.len();
+        //     let e = g.find_edge(cycle_nodes[n - 1], cycle_nodes[0]).unwrap();
+        //     remove_edges.insert(e);
+        // });
         let accepted_state_index = NodeIndex::from(accepted_state);
         let mut pathes = Vec::<Vec<NodeIndex<usize>>>::new();
         let mut stack = Vec::<(NodeIndex<usize>, Vec<NodeIndex<usize>>)>::new();
         stack.push((accepted_state_index, vec![accepted_state_index]));
-        let mut pushed_edge = HashSet::new();
+        // let mut pushed_edge = HashSet::new();
         let mut self_nodes = HashSet::new();
+        let mut self_nodes_char = HashMap::new();
+        for state in 0..=max_state {
+            let node = NodeIndex::from(state);
+            if let Some(edge) = graph.find_edge(node, node) {
+                let str = graph.edge_weight(edge).unwrap().as_str();
+                let bytes = str.as_bytes();
+                self_nodes_char.insert(node.index(), bytes[0] as char);
+            }
+        }
 
         while stack.len() != 0 {
             // println!("stack size {} visited size {}", stack.len(), visited.len());
@@ -121,17 +130,18 @@ impl DecomposedRegexConfig {
                     continue;
                 }
                 if !path.contains(&parent) {
+                    // println!("path {:?}", path);
                     if parent.index() == 0 {
                         // println!("path {:?}", path);
                         pathes.push(path.to_vec());
                         continue;
                     }
-                    if let Some(rev_e) = graph.find_edge(parent, node) {
-                        if remove_edges.contains(&rev_e) && !pushed_edge.contains(&rev_e) {
-                            graph.remove_edge(rev_e);
-                        }
-                    }
-                    pushed_edge.insert(edge);
+                    // if let Some(rev_e) = graph.find_edge(parent, node) {
+                    //     if remove_edges.contains(&rev_e) && !pushed_edge.contains(&rev_e) {
+                    //         // graph.remove_edge(rev_e);
+                    //     }
+                    // }
+                    // pushed_edge.insert(edge);
                     stack.push((parent, vec![path.clone(), vec![parent]].concat()));
                 }
             }
@@ -155,8 +165,12 @@ impl DecomposedRegexConfig {
         let num_public_parts = public_config_indexes.len();
         debug_assert_eq!(num_public_parts, substr_file_pathes.len());
         let mut substr_defs_array = (0..num_public_parts)
-            .map(|_| HashSet::<(usize, usize, bool)>::new())
+            .map(|_| HashSet::<(usize, usize)>::new())
             .collect_vec();
+        let mut substr_endpoints_array = (0..num_public_parts)
+            .map(|_| (HashSet::<usize>::new(), HashSet::<usize>::new()))
+            .collect_vec();
+        // let mut substr_pathes = vec![vec![]; num_public_parts];
         for path in pathes.iter_mut() {
             let n = path.len();
             path.append(&mut vec![NodeIndex::from(0)]);
@@ -194,26 +208,55 @@ impl DecomposedRegexConfig {
             //     );
             // }
 
-            self.add_substr_defs_from_path(
-                &mut substr_defs_array,
+            let substr_states = self.get_substr_defs_from_path(
                 &path_states,
                 &path_strs,
                 &part_regexes,
                 &public_config_indexes,
             )?;
-        }
-        for index in self_nodes.iter() {
-            // println!("self index {}", index);
-            for defs in substr_defs_array.iter_mut() {
-                if defs
-                    .iter()
-                    .find(|def| (def.0 == *index || def.1 == *index) && !def.2)
-                    .is_some()
-                {
-                    defs.insert((*index, *index, false));
+            for (substr_idx, (path_states, substr)) in substr_states.into_iter().enumerate() {
+                // println!(
+                //     "substr_idx {}, path_states {:?}, substr {}",
+                //     substr_idx, path_states, substr
+                // );
+                let defs = &mut substr_defs_array[substr_idx];
+                substr_endpoints_array[substr_idx].0.insert(path_states[0]);
+                substr_endpoints_array[substr_idx]
+                    .1
+                    .insert(path_states[path_states.len() - 1]);
+                for path_idx in 0..(path_states.len() - 1) {
+                    defs.insert((path_states[path_idx], path_states[path_idx + 1]));
+                    if self_nodes.contains(&path_states[path_idx]) {
+                        defs.insert((path_states[path_idx], path_states[path_idx]));
+                    }
+                    // println!("{} {}", substr_def_array[idx], substr_def_array[idx + 1],);
+                }
+                if self_nodes.contains(&path_states[path_states.len() - 1]) {
+                    let part_index = public_config_indexes[substr_idx];
+                    let part_regex = &part_regexes[part_index];
+                    let substr =
+                        substr + &self_nodes_char[&path_states[path_states.len() - 1]].to_string();
+                    if part_regex.is_match(&substr).unwrap() {
+                        defs.insert((
+                            path_states[path_states.len() - 1],
+                            path_states[path_states.len() - 1],
+                        ));
+                    }
                 }
             }
         }
+        // for index in self_nodes.iter() {
+        //     // println!("self index {}", index);
+        //     for defs in substr_defs_array.iter_mut() {
+        //         if defs
+        //             .iter()
+        //             .find(|def| (def.0 == *index || def.1 == *index) && !def.2)
+        //             .is_some()
+        //         {
+        //             defs.insert((*index, *index, false));
+        //         }
+        //     }
+        // }
         // println!("{:?}", substr_defs_array);
 
         for (idx, defs) in substr_defs_array.into_iter().enumerate() {
@@ -221,7 +264,17 @@ impl DecomposedRegexConfig {
             let max_size = &part_configs[public_config_indexes[idx]].max_size;
             writer.write_fmt(format_args!("{}\n", &max_size))?;
             writer.write_fmt(format_args!("0\n{}\n", self.max_byte_size - 1))?;
-            for (cur, next, _) in defs.iter() {
+            let mut starts_str = "".to_string();
+            for start in substr_endpoints_array[idx].0.iter() {
+                starts_str += &format!("{} ", start);
+            }
+            writer.write_fmt(format_args!("{}\n", starts_str))?;
+            let mut ends_str = "".to_string();
+            for end in substr_endpoints_array[idx].1.iter() {
+                ends_str += &format!("{} ", end);
+            }
+            writer.write_fmt(format_args!("{}\n", ends_str))?;
+            for (cur, next) in defs.iter() {
                 writer.write_fmt(format_args!("{} {}\n", cur, next))?;
             }
         }
@@ -229,14 +282,14 @@ impl DecomposedRegexConfig {
         Ok(())
     }
 
-    fn add_substr_defs_from_path(
+    fn get_substr_defs_from_path(
         &self,
-        substr_defs_array: &mut [HashSet<(usize, usize, bool)>],
+        // substr_defs_array: &mut [HashSet<(usize, usize, bool)>],
         path_states: &[usize],
         path_strs: &[String],
         part_regexes: &[Regex],
         public_config_indexes: &[usize],
-    ) -> Result<(), VrmError> {
+    ) -> Result<Vec<(Vec<usize>, String)>, VrmError> {
         debug_assert_eq!(path_states.len(), path_strs.len() + 1);
         let mut concat_str = String::new();
         for (idx, str) in path_strs.into_iter().enumerate() {
@@ -266,12 +319,8 @@ impl DecomposedRegexConfig {
                 }
             })
             .collect_vec();
-
-        for (idx, (index, defs)) in public_config_indexes
-            .iter()
-            .zip(substr_defs_array.iter_mut())
-            .enumerate()
-        {
+        let mut substr_results = vec![];
+        for (idx, index) in public_config_indexes.iter().enumerate() {
             let start = if *index == 0 {
                 0
             } else {
@@ -279,14 +328,18 @@ impl DecomposedRegexConfig {
             };
             let end = index_ends[*index];
             // println!("start {} end {}", start, end);
-            let substr_def_array: &[usize] = &path_states[(start)..=end];
-            // println!("substr_def_array {:?}", substr_def_array);
-            for idx in 0..(substr_def_array.len() - 1) {
-                // println!("{} {}", substr_def_array[idx], substr_def_array[idx + 1],);
-                let is_last = (idx == substr_def_array.len() - 2) && idx > 0;
-                defs.insert((substr_def_array[idx], substr_def_array[idx + 1], is_last));
-            }
+            substr_results.push((
+                path_states[(start)..=end].to_vec(),
+                concat_str[0..=(end - 1)].to_string(),
+            ));
+            // let substr_def_array: &[usize] = &path_states[(start)..=end];
+            // // println!("substr_def_array {:?}", substr_def_array);
+            // for idx in 0..(substr_def_array.len() - 1) {
+            //     // println!("{} {}", substr_def_array[idx], substr_def_array[idx + 1],);
+            //     let is_last = (idx == substr_def_array.len() - 2) && idx > 0;
+            //     defs.insert((substr_def_array[idx], substr_def_array[idx + 1], is_last));
+            // }
         }
-        Ok(())
+        Ok(substr_results)
     }
 }

@@ -71,8 +71,8 @@ pub struct SubstrRegexDef {
     pub min_position: u64,
     pub max_position: u64,
     pub valid_state_transitions: HashSet<(u64, u64)>,
-    pub start_state: u64,
-    pub end_state: u64,
+    pub start_states: Vec<u64>,
+    pub end_states: Vec<u64>,
 }
 
 impl SubstrRegexDef {
@@ -81,16 +81,16 @@ impl SubstrRegexDef {
         min_position: u64,
         max_position: u64,
         valid_state_transitions: HashSet<(u64, u64)>,
-        start_state: u64,
-        end_state: u64,
+        start_states: Vec<u64>,
+        end_states: Vec<u64>,
     ) -> Self {
         Self {
             max_length,
             min_position,
             max_position,
             valid_state_transitions,
-            start_state,
-            end_state,
+            start_states,
+            end_states,
         }
     }
 
@@ -98,11 +98,12 @@ impl SubstrRegexDef {
         let file = File::open(file_path).unwrap();
         let reader = BufReader::new(file);
         let mut valid_state_transitions = HashSet::<(u64, u64)>::new();
-        let mut one_state_path = HashMap::<u64, u64>::new();
+        // let mut one_state_path = HashMap::<u64, u64>::new();
         let mut max_length = 0;
         let mut min_position = 0;
         let mut max_position = 0;
-        let mut start_state = u64::MAX;
+        let mut start_states = vec![];
+        let mut end_states = vec![];
 
         for (idx, line) in reader.lines().enumerate() {
             let line = line.expect(&format!("fail to get {}-th line.", idx));
@@ -119,20 +120,25 @@ impl SubstrRegexDef {
                 min_position = elements[0];
             } else if idx == 2 {
                 max_position = elements[0];
+            } else if idx == 3 {
+                start_states = elements;
+            } else if idx == 4 {
+                end_states = elements;
             } else {
                 valid_state_transitions.insert((elements[0], elements[1]));
-                if elements[0] < start_state {
-                    start_state = elements[0];
-                }
-                if one_state_path.get(&elements[0]).is_none() && elements[0] != elements[1] {
-                    one_state_path.insert(elements[0], elements[1]);
-                }
+                // if elements[0] < start_state {
+                //     start_state = elements[0];
+                // }
+                // if one_state_path.get(&elements[0]).is_none() && elements[0] != elements[1] {
+                //     one_state_path.insert(elements[0], elements[1]);
+                // }
             };
         }
-        let mut end_state = start_state;
-        while let Some(next_state) = one_state_path.get(&end_state) {
-            end_state = *next_state;
-        }
+        // let mut end_state = start_state;
+        // while let Some(next_state) = one_state_path.get(&end_state) {
+        //     println!("end_state {} next_state {}", end_state, next_state);
+        //     end_state = *next_state;
+        // }
         // println!(
         //     "start_state {} end_state {} valid transition {:?}",
         //     start_state, end_state, valid_state_transitions
@@ -143,8 +149,8 @@ impl SubstrRegexDef {
             min_position,
             max_position,
             valid_state_transitions,
-            start_state,
-            end_state,
+            start_states,
+            end_states,
         }
     }
 }

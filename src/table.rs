@@ -54,6 +54,7 @@ impl<F: PrimeField> RegexTableConfig<F> {
         substr_id_offset: usize,
     ) -> Result<usize, Error> {
         let dummy_state = regex_defs.allstr.largest_state_val + 1;
+        let num_rows = regex_defs.allstr.state_lookup.len();
         layouter.assign_table(
             || "load transition table",
             |mut table| {
@@ -97,7 +98,6 @@ impl<F: PrimeField> RegexTableConfig<F> {
                     .iter()
                     .collect::<Vec<(&(u8, u64), &(usize, u64))>>();
                 lookups.sort_by(|a, b| a.1 .0.cmp(&b.1 .0));
-                let num_lookup = lookups.len();
                 for ((char, cur_state), (idx, next_state)) in lookups.into_iter() {
                     let mut substr_id = 0;
                     for (j, substr_def) in regex_defs.substrs.iter().enumerate() {
@@ -140,25 +140,48 @@ impl<F: PrimeField> RegexTableConfig<F> {
                 offset += 1;
                 for (idx, substr_def) in regex_defs.substrs.iter().enumerate() {
                     let substr_id = substr_id_offset + idx;
-                    table.assign_cell(
-                        || format!("endpoints_substr_ids at {}", offset),
-                        self.endpoints_substr_ids,
-                        offset,
-                        || Value::known(F::from(substr_id as u64)),
-                    )?;
-                    table.assign_cell(
-                        || format!("start_states at {}", offset),
-                        self.start_states,
-                        offset,
-                        || Value::known(F::from(substr_def.start_state as u64)),
-                    )?;
-                    table.assign_cell(
-                        || format!("end_states at {}", offset),
-                        self.end_states,
-                        offset,
-                        || Value::known(F::from(substr_def.end_state as u64)),
-                    )?;
-                    offset += 1;
+                    for start in substr_def.start_states.iter() {
+                        table.assign_cell(
+                            || format!("endpoints_substr_ids at {}", offset),
+                            self.endpoints_substr_ids,
+                            offset,
+                            || Value::known(F::from(substr_id as u64)),
+                        )?;
+                        table.assign_cell(
+                            || format!("start_states at {}", offset),
+                            self.start_states,
+                            offset,
+                            || Value::known(F::from(*start as u64)),
+                        )?;
+                        table.assign_cell(
+                            || format!("end_states at {}", offset),
+                            self.end_states,
+                            offset,
+                            || Value::known(F::from(dummy_state)),
+                        )?;
+                        offset += 1;
+                    }
+                    for end in substr_def.end_states.iter() {
+                        table.assign_cell(
+                            || format!("endpoints_substr_ids at {}", offset),
+                            self.endpoints_substr_ids,
+                            offset,
+                            || Value::known(F::from(substr_id as u64)),
+                        )?;
+                        table.assign_cell(
+                            || format!("start_states at {}", offset),
+                            self.start_states,
+                            offset,
+                            || Value::known(F::from(dummy_state as u64)),
+                        )?;
+                        table.assign_cell(
+                            || format!("end_states at {}", offset),
+                            self.end_states,
+                            offset,
+                            || Value::known(F::from(*end)),
+                        )?;
+                        offset += 1;
+                    }
                 }
                 Ok(())
             },
