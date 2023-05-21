@@ -1,20 +1,13 @@
-use std::{collections::HashMap, fs::File, path::Path};
+use std::{collections::HashMap, fs::File};
 mod js_caller;
 use crate::vrm::js_caller::*;
 use fancy_regex::Regex;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
-use std::fs;
-use std::io::Write;
-// use daggy::Dag;
-// use daggy::NodeIndex;
-// use daggy::Walker;
-use graph_cycles::Cycles;
 use petgraph::prelude::*;
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::fmt::format;
 use std::io::BufWriter;
+use std::io::Write;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -59,7 +52,6 @@ impl DecomposedRegexConfig {
         substr_file_pathes: &[PathBuf],
     ) -> Result<(), VrmError> {
         let catch_all = catch_all_regex_str()?;
-        // let text_context_prefix = text_context_prefix_regex_str()?;
         let first_part = RegexPartConfig {
             is_public: false,
             regex_def: "(".to_string() + catch_all.as_str() + "+)?",
@@ -80,7 +72,6 @@ impl DecomposedRegexConfig {
         {
             all_regex += &config.regex_def;
         }
-        // println!("all_regex {}", all_regex);
         let dfa_val = get_dfa_json_value(&all_regex)?;
         let regex_text = dfa_to_regex_def_text(&dfa_val)?;
         let mut regex_file = File::create(allstr_file_path)?;
@@ -106,7 +97,6 @@ impl DecomposedRegexConfig {
         let mut pathes = Vec::<Vec<NodeIndex<usize>>>::new();
         let mut stack = Vec::<(NodeIndex<usize>, Vec<NodeIndex<usize>>)>::new();
         stack.push((accepted_state_index, vec![accepted_state_index]));
-        // let mut pushed_edge = HashSet::new();
         let mut self_nodes = HashSet::new();
         let mut self_nodes_char = HashMap::new();
         for state in 0..=max_state {
@@ -119,9 +109,7 @@ impl DecomposedRegexConfig {
         }
 
         while stack.len() != 0 {
-            // println!("stack size {} visited size {}", stack.len(), visited.len());
             let (node, path) = stack.pop().unwrap();
-            // println!("node {:?}", node);
             let mut parents = graph.neighbors(node).detach();
             while let Some((edge, parent)) = parents.next(&graph) {
                 if parent.index() == node.index() {
@@ -130,18 +118,10 @@ impl DecomposedRegexConfig {
                     continue;
                 }
                 if !path.contains(&parent) {
-                    // println!("path {:?}", path);
                     if parent.index() == 0 {
-                        // println!("path {:?}", path);
                         pathes.push(path.to_vec());
                         continue;
                     }
-                    // if let Some(rev_e) = graph.find_edge(parent, node) {
-                    //     if remove_edges.contains(&rev_e) && !pushed_edge.contains(&rev_e) {
-                    //         // graph.remove_edge(rev_e);
-                    //     }
-                    // }
-                    // pushed_edge.insert(edge);
                     stack.push((parent, vec![path.clone(), vec![parent]].concat()));
                 }
             }
@@ -170,13 +150,11 @@ impl DecomposedRegexConfig {
         let mut substr_endpoints_array = (0..num_public_parts)
             .map(|_| (HashSet::<usize>::new(), HashSet::<usize>::new()))
             .collect_vec();
-        // let mut substr_pathes = vec![vec![]; num_public_parts];
         for path in pathes.iter_mut() {
             let n = path.len();
             path.append(&mut vec![NodeIndex::from(0)]);
             let edges = (0..n)
                 .map(|idx| {
-                    // println!("from {:?} to {:?}", path[idx], path[idx + 1]);
                     graph
                         .find_edge(path[idx], path[idx + 1])
                         .ok_or(VrmError::NoEdge(path[idx], path[idx + 1]))
@@ -284,7 +262,6 @@ impl DecomposedRegexConfig {
 
     fn get_substr_defs_from_path(
         &self,
-        // substr_defs_array: &mut [HashSet<(usize, usize, bool)>],
         path_states: &[usize],
         path_strs: &[String],
         part_regexes: &[Regex],
@@ -292,7 +269,7 @@ impl DecomposedRegexConfig {
     ) -> Result<Vec<(Vec<usize>, String)>, VrmError> {
         debug_assert_eq!(path_states.len(), path_strs.len() + 1);
         let mut concat_str = String::new();
-        for (idx, str) in path_strs.into_iter().enumerate() {
+        for str in path_strs.into_iter() {
             let first_chars = str.as_bytes();
             concat_str += &(first_chars[0] as char).to_string();
         }
@@ -320,7 +297,7 @@ impl DecomposedRegexConfig {
             })
             .collect_vec();
         let mut substr_results = vec![];
-        for (idx, index) in public_config_indexes.iter().enumerate() {
+        for index in public_config_indexes.iter() {
             let start = if *index == 0 {
                 0
             } else {
@@ -332,13 +309,6 @@ impl DecomposedRegexConfig {
                 path_states[(start)..=end].to_vec(),
                 concat_str[0..=(end - 1)].to_string(),
             ));
-            // let substr_def_array: &[usize] = &path_states[(start)..=end];
-            // // println!("substr_def_array {:?}", substr_def_array);
-            // for idx in 0..(substr_def_array.len() - 1) {
-            //     // println!("{} {}", substr_def_array[idx], substr_def_array[idx + 1],);
-            //     let is_last = (idx == substr_def_array.len() - 2) && idx > 0;
-            //     defs.insert((substr_def_array[idx], substr_def_array[idx + 1], is_last));
-            // }
         }
         Ok(substr_results)
     }
