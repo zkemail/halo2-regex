@@ -101,7 +101,7 @@ impl SubstrRegexDef {
         let mut max_length = 0;
         let mut min_position = 0;
         let mut max_position = 0;
-        let mut start_state = 0;
+        let mut start_state = u64::MAX;
         let mut end_state = 0;
 
         for (idx, line) in reader.lines().enumerate() {
@@ -119,14 +119,18 @@ impl SubstrRegexDef {
                 min_position = elements[0];
             } else if idx == 2 {
                 max_position = elements[0];
-            } else if idx == 3 {
-                start_state = elements[0];
-            } else if idx == 4 {
-                end_state = elements[0];
             } else {
                 valid_state_transitions.insert((elements[0], elements[1]));
+                if elements[0] < start_state {
+                    start_state = elements[0];
+                    end_state = elements[1];
+                }
+                if elements[0] == end_state {
+                    end_state = elements[1];
+                }
             };
         }
+
         Self {
             max_length,
             min_position,
