@@ -238,16 +238,19 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         let states = self.derive_states(characters);
         let substr_ids = self.derive_substr_ids(states.as_slice());
         let (is_starts, is_ends) = self.derive_is_start_end(&states, &substr_ids);
-        // for idx in 0..characters.len() {
-        //     println!(
-        //         "idx {}, char {}, state {}, substr_id {}, is_start {}, is_end {}",
-        //         idx,
-        //         characters[idx] as char,
-        //         states[0][idx],
-        //         substr_ids[0][idx],
-        //         is_starts[0][idx],
-        //         is_ends[0][idx]
-        //     );
+        // for d_idx in 0..self.regex_defs.len() {
+        //     for idx in 0..characters.len() {
+        //         println!(
+        //             "d_idx {}, idx {}, char {}, state {}, substr_id {}, is_start {}, is_end {}",
+        //             d_idx,
+        //             idx,
+        //             characters[idx] as char,
+        //             states[d_idx][idx],
+        //             substr_ids[d_idx][idx],
+        //             is_starts[d_idx][idx],
+        //             is_ends[d_idx][idx]
+        //         );
+        //     }
         // }
 
         self.q_first.enable(&mut ctx.region, 0)?;

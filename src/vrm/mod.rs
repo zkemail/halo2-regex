@@ -204,6 +204,18 @@ impl DecomposedRegexConfig {
                     if self_nodes.contains(&path_states[path_idx]) {
                         defs.insert((path_states[path_idx], path_states[path_idx]));
                     }
+                    for pre_path_idx in 0..=path_idx {
+                        if graph
+                            .find_edge(
+                                NodeIndex::from(path_states[path_idx + 1]),
+                                NodeIndex::from(path_states[pre_path_idx]),
+                            )
+                            .is_some()
+                        {
+                            defs.insert((path_states[path_idx + 1], path_states[pre_path_idx]));
+                        }
+                    }
+
                     // println!("{} {}", substr_def_array[idx], substr_def_array[idx + 1],);
                 }
                 if self_nodes.contains(&path_states[path_states.len() - 1]) {
