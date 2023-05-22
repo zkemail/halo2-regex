@@ -240,7 +240,8 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         let (is_starts, is_ends) = self.derive_is_start_end(&states, &substr_ids);
         // for idx in 0..characters.len() {
         //     println!(
-        //         "char {}, state {}, substr_id {}, is_start {}, is_end {}",
+        //         "idx {}, char {}, state {}, substr_id {}, is_start {}, is_end {}",
+        //         idx,
         //         characters[idx] as char,
         //         states[0][idx],
         //         substr_ids[0][idx],
@@ -1235,7 +1236,7 @@ mod test {
                 &[Path::new("./test_regexes/substr3_test_lookup.txt").to_path_buf()],
             )
             .unwrap();
-        let characters: Vec<u8> = "from:alice<alice@gmail.com>\r\n"
+        let characters: Vec<u8> = "dummy\r\nfrom:alice<alice@gmail.com>\r\n"
             .chars()
             .map(|c| c as u8)
             .collect();
@@ -1247,7 +1248,7 @@ mod test {
         // Successful cases
         let circuit = TestCircuit2::<Fr> {
             characters,
-            correct_substrs: vec![(11, "alice@gmail.com".to_string())],
+            correct_substrs: vec![(18, "alice@gmail.com".to_string())],
             is_success: true,
             _marker: PhantomData,
         };

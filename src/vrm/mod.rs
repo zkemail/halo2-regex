@@ -51,25 +51,22 @@ impl DecomposedRegexConfig {
         allstr_file_path: &PathBuf,
         substr_file_pathes: &[PathBuf],
     ) -> Result<(), VrmError> {
-        let catch_all = catch_all_regex_str()?;
-        let first_part = RegexPartConfig {
-            is_public: false,
-            regex_def: "(".to_string() + catch_all.as_str() + "+)?",
-            max_size: self.max_byte_size,
-            solidity: None,
-        };
-        let last_part = RegexPartConfig {
-            is_public: false,
-            regex_def: "(".to_string() + catch_all.as_str() + "+)?",
-            max_size: self.max_byte_size,
-            solidity: None,
-        };
+        // let catch_all = catch_all_regex_str()?;
+        // let first_part = RegexPartConfig {
+        //     is_public: false,
+        //     regex_def: "(".to_string() + catch_all.as_str() + "+)?",
+        //     max_size: self.max_byte_size,
+        //     solidity: None,
+        // };
+        // let last_part = RegexPartConfig {
+        //     is_public: false,
+        //     regex_def: "(".to_string() + catch_all.as_str() + "+)?",
+        //     max_size: self.max_byte_size,
+        //     solidity: None,
+        // };
         let mut all_regex = String::new();
         let part_configs = &self.parts;
-        for config in vec![&[first_part][..], part_configs, &[last_part][..]]
-            .concat()
-            .iter()
-        {
+        for config in part_configs.iter() {
             all_regex += &config.regex_def;
         }
         let dfa_val = get_dfa_json_value(&all_regex)?;
