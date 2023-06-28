@@ -9,7 +9,9 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 use crate::defs::{AllstrRegexDef, RegexDefs, SubstrRegexDef};
+use crate::RegexVerifyConfig;
 
+/// Lookup tables used in [`RegexVerifyConfig`].
 #[derive(Debug, Clone)]
 pub struct RegexTableConfig<F: PrimeField> {
     pub(crate) characters: TableColumn,
@@ -23,6 +25,9 @@ pub struct RegexTableConfig<F: PrimeField> {
 }
 
 impl<F: PrimeField> RegexTableConfig<F> {
+    /// Configure a new [`RegexTableConfig`].
+    /// # Arguments
+    /// * `meta` - a constrain system in which contraints are defined.
     pub fn configure(meta: &mut ConstraintSystem<F>) -> Self {
         let characters = meta.lookup_table_column();
         let cur_states = meta.lookup_table_column();
@@ -44,6 +49,15 @@ impl<F: PrimeField> RegexTableConfig<F> {
         }
     }
 
+    /// Load looup tables used in [`RegexVerifyConfig`].
+    ///
+    /// # Arguments
+    /// * `layouter` - a [`Layouter`] in which the lookup tables are loaded.
+    /// * `regex_defs` - a regex definition that the input string must satisfy.
+    /// * `substr_id_offset` - a `substr_id` of the first substring of `regex_defs`.
+    ///
+    /// # Return values
+    /// Return `substr_id_offset + regex_defs.substrs.len()`.
     pub fn load(
         &self,
         layouter: &mut impl Layouter<F>,

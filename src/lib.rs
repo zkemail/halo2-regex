@@ -1,12 +1,15 @@
-pub mod defs;
-// mod regex;
-// mod substr;
-pub mod table;
-pub mod vrm;
-pub use defs::*;
-// pub use regex::*;
-// pub use substr::*;
+//! Regex verification circuit compatible with the [halo2 library developed by privacy-scaling-explorations team](https://github.com/privacy-scaling-explorations/halo2).
+//!
 
+/// Regex definitions.
+pub mod defs;
+/// Lookup table for each regex definition.
+pub mod table;
+/// Variable-regex mapping, a helpful tool to generate a regex definition file from a decomposed regexes.
+pub mod vrm;
+use crate::table::RegexTableConfig;
+use crate::{AllstrRegexDef, RegexDefs, SubstrRegexDef};
+pub use defs::*;
 use halo2_base::halo2_proofs::{
     circuit::{AssignedCell, Layouter, Region, SimpleFloorPlanner, Value},
     plonk::{
@@ -28,17 +31,25 @@ use std::{
     marker::PhantomData,
 };
 
-use crate::table::RegexTableConfig;
-use crate::{AllstrRegexDef, RegexDefs, SubstrRegexDef};
+/// Output type definition of [`RegexVerifyConfig`].
 #[derive(Debug, Clone, Default)]
 pub struct AssignedRegexResult<'a, F: PrimeField> {
+    /// The assigned bits of `enable_flag` that indicates whether each character of the input string is a padded byte or not. (`enable_flag=true` iff the character is not padded one.)
+    /// The length is equal to `max_chars_size`.
     pub all_enable_flags: Vec<AssignedValue<'a, F>>,
+    /// The assigned character (byte) of the input string.
+    /// The length is equal to `max_chars_size`.
     pub all_characters: Vec<AssignedValue<'a, F>>,
-    // pub all_states: Vec<AssignedValue<'a, F>>,
+    /// The assigned substring id of characters in the input string.
+    /// The length is equal to `max_chars_size`.    
     pub all_substr_ids: Vec<AssignedValue<'a, F>>,
+    /// The masked version of `all_characters`.
+    /// Each character in `all_characters` is turned to zero in `masked_characters` iff its `substr_id` is zero, i.e., it belongs to no substring.
+    /// The length is equal to `max_chars_size`.    
     pub masked_characters: Vec<AssignedValue<'a, F>>,
 }
 
+/// Configuration to 1) verify that the input string satisfies the specified regexes and 2) extracts the specified substrings from the input string.
 #[derive(Debug, Clone)]
 pub struct RegexVerifyConfig<F: PrimeField> {
     characters: Column<Advice>,
@@ -52,10 +63,21 @@ pub struct RegexVerifyConfig<F: PrimeField> {
     not_q_first: Selector,
     max_chars_size: usize,
     gate: FlexGateConfig<F>,
+    /// A vector of regex definitions applied to the input string.
     pub regex_defs: Vec<RegexDefs>,
 }
 
 impl<F: PrimeField> RegexVerifyConfig<F> {
+    /// Configure a new [`RegexVerifyConfig`].
+    ///
+    /// # Arguments
+    /// * `meta` - a constrain system in which contraints are defined.
+    /// * `max_chars_size` - the maximum length of the input string.
+    /// * `gate` - a configuration for [`FlexGateConfig`].
+    /// * `regex_defs` - a vector of regex definitions applied to the input string.
+    ///
+    /// # Return values
+    /// Return a new [`RegexVerifyConfig`].
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
         max_chars_size: usize,
@@ -230,6 +252,14 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         }
     }
 
+    /// Verify that the input string `characters` satisfies each regex of [`AllstrRegexDef`] in `regex_defs` and extracts its strings that match any of [`SubstrRegexDef`] in `regex_defs`.
+    ///
+    /// # Arguments
+    /// * `ctx` - a region context.
+    /// * `characters` - bytes of the input string.
+    ///
+    /// # Return values
+    /// Return the assigned values as [`AssignedRegexResult`].
     pub fn match_substrs<'v: 'a, 'a>(
         &self,
         ctx: &mut Context<'v, F>,
@@ -611,6 +641,10 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         Ok(result)
     }
 
+    /// Load looup tables of each [`RegexDefs`] in `regex_defs`.
+    ///
+    /// # Arguments
+    /// * `layouter` - a [`Layouter`] in which the lookup tables are loaded.
     pub fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
         let mut substr_id_offset = 1;
         for (idx, table) in self.table_array.iter().enumerate() {
@@ -761,7 +795,7 @@ mod test {
 
     // Checks a regex of string len
     const MAX_STRING_LEN: usize = 1024;
-    const K: usize = 13;
+    const K: usize = 17;
 
     #[derive(Default, Clone, Debug)]
     struct TestCircuit1<F: PrimeField> {
@@ -772,7 +806,7 @@ mod test {
     }
 
     impl<F: PrimeField> TestCircuit1<F> {
-        const NUM_ADVICE: usize = 25;
+        const NUM_ADVICE: usize = 2;
         const NUM_FIXED: usize = 1;
     }
 
