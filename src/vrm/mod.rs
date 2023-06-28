@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fs::File};
 mod js_caller;
 use crate::vrm::js_caller::*;
+use crate::{AllstrRegexDef, SubstrRegexDef};
 use fancy_regex::Regex;
 use itertools::Itertools;
 use petgraph::prelude::*;
@@ -11,6 +12,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use thiserror::Error;
 
+/// Error definitions related to VRM.
 #[derive(Error, Debug)]
 pub enum VrmError {
     #[error("No edge from {:?} to {:?} in the graph",.0,.1)]
@@ -23,20 +25,29 @@ pub enum VrmError {
     RegexError(#[from] fancy_regex::Error),
 }
 
+/// A configuration of decomposed regexes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DecomposedRegexConfig {
+    /// Maximum byte size of the input string.
     pub max_byte_size: usize,
+    /// A vector of decomposed regexes.
     pub parts: Vec<RegexPartConfig>,
 }
 
+/// Decomposed regex part.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegexPartConfig {
+    /// A flag indicating whether the substring matching with `regex_def` should be exposed.
     pub is_public: bool,
+    /// A regex string.
     pub regex_def: String,
+    /// Maximum byte size of the substring in this part.
     pub max_size: usize,
+    /// (Optional) A solidity type of the substring in this part, e.g., "String", "Int", "Decimal".
     pub solidity: Option<SoldityType>,
 }
 
+/// Solidity type of the substring.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SoldityType {
@@ -46,6 +57,11 @@ pub enum SoldityType {
 }
 
 impl DecomposedRegexConfig {
+    /// Generate text files for [`AllstrRegexDef`] and [`SubstrRegexDef`].
+    ///
+    /// # Arguments
+    /// * `allstr_file_path` - a file path of the text file for [`AllstrRegexDef`].
+    /// * `substr_file_pathes` - a vector of the text files for [`SubstrRegexDef`].
     pub fn gen_regex_files(
         &self,
         allstr_file_path: &PathBuf,

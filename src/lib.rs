@@ -1,11 +1,50 @@
 //! Regex verification circuit compatible with the [halo2 library developed by privacy-scaling-explorations team](https://github.com/privacy-scaling-explorations/halo2).
 //!
+//! Our regex verification chip [`RegexVerifyConfig`] enables you to prove that
+//! - the input string satisfies regular expressions (regexes) specified in the chip.
+//! - the substrings are correctly extracted from the input string according to substring definitions.
+//!
+//! You need to specify the regex definition [`RegexDefs`] as a combination of [`AllstrRegexDef`], the regex that whole of the input string must satisfy, and a vector of [`SubstrRegexDef`], regex that each substring must satisfy.
+//! Specifically, there are two ways to define them:
+//! 1. (manual way) converting the regex into an equivalent determistic finite automaton (DFA), selecting state transitions for each substring, and writing them in text files to define the regex definition.
+//! 2. (automatic way) writing the decomposed version of the regex and then generating those text files automatically with variable-regex mapping (VRM).
+//!
+//! While the manual way supports more kinds of regexes than the automatic way, the latter is recommended and sufficient for most developers.
+//! For example, if you want to verify the regex of "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+." and extract the substring of "(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+" from the input string, you can define the decomposed regexes as follows.
+//! ```
+//! {
+//!     "max_byte_size": 128,
+//!     "parts":[
+//!         {
+//!             "is_public": false,
+//!             "regex_def": "email was meant for @",
+//!             "max_size": 21
+//!         },
+//!         {
+//!             "is_public": true,
+//!             "regex_def": "(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+",
+//!             "max_size": 4,
+//!             "solidity": {
+//!                 "type": "String"
+//!             }
+//!         },
+//!         {
+//!             "is_public": false,
+//!             "regex_def": ".",
+//!             "max_size": 1
+//!         }
+//!     ]
+//! }
+//! ```
+//! You can see that the regex is split before and after the substring definition.
+//! The `is_public` parameter in each decomposed part is true iff it denotes the substring definition.
+//! That json file is converted into [`DecomposedRegexConfig`], which can generate text files used by [`RegexDefs`].
 
 /// Regex definitions.
 pub mod defs;
 /// Lookup table for each regex definition.
 pub mod table;
-/// Variable-regex mapping, a helpful tool to generate a regex definition file from a decomposed regexes.
+/// Variable-regex mapping, a helpful tool to generate regex definition files from decomposed regexes.
 pub mod vrm;
 use crate::table::RegexTableConfig;
 use crate::{AllstrRegexDef, RegexDefs, SubstrRegexDef};
@@ -30,6 +69,7 @@ use std::{
     io::{BufRead, BufReader},
     marker::PhantomData,
 };
+use vrm::DecomposedRegexConfig;
 
 /// Output type definition of [`RegexVerifyConfig`].
 #[derive(Debug, Clone, Default)]

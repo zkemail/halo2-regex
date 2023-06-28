@@ -37,9 +37,13 @@ pub struct AllstrRegexDef {
 
 impl AllstrRegexDef {
     /// Construct [`AllstrRegexDef`] from a text file of state transitions.
+    ///
     /// First line: initial state id.
+    ///
     /// Second line: accepted state id.
+    ///
     /// Third line: the largest largest state id.
+    ///
     /// The following lines: "(current state id in DFA) (next state id) (character)" for each line.
     ///
     /// # Arguments
@@ -138,11 +142,17 @@ impl SubstrRegexDef {
     }
 
     /// Construct [`SubstrRegexDef`] from a text file to define the substring.
+    ///
     /// First line: maximum length of the substring.
+    ///
     /// Second line: a minimum position of the first character in the substring.
+    ///
     /// Third line: a maximum position of the first character in the substring.
+    ///
     /// Fourth line: a vector of state ids from which the state ids of the substring start. The ids within a line are separated by spaces.
+    ///
     /// Fifth line: a vector of state ids to which the state ids of the substring end. The ids within a line are separated by spaces.
+    ///
     /// The following lines: `(current_state_id, next_state_id)` for each line. The ids within a line are separated by spaces.
     ///
     /// # Arguments
