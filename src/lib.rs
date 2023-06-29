@@ -693,7 +693,8 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         Ok(())
     }
 
-    fn gate(&self) -> &FlexGateConfig<F> {
+    /// Return a reference of internally used [`FlexGateConfig`].
+    pub fn gate(&self) -> &FlexGateConfig<F> {
         &self.gate
     }
 
