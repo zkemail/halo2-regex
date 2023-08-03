@@ -11,8 +11,8 @@
 //!
 //! While the manual way supports more kinds of regexes than the automatic way, the latter is recommended and sufficient for most developers.
 //! For example, if you want to verify the regex of "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+." and extract the substring of "(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+" from the input string, you can define the decomposed regexes as follows.
-//! ```
-//! {
+//!
+//! "{
 //!     "max_byte_size": 128,
 //!     "parts":[
 //!         {
@@ -34,8 +34,8 @@
 //!             "max_size": 1
 //!         }
 //!     ]
-//! }
-//! ```
+//! }"
+//!
 //! You can see that the regex is split before and after the substring definition.
 //! The `is_public` parameter in each decomposed part is true iff it denotes the substring definition.
 //! That json file is converted into [`DecomposedRegexConfig`], which can generate text files used by [`RegexDefs`].

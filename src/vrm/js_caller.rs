@@ -47,6 +47,13 @@ pub fn get_dfa_json_value(regex: &str) -> Result<Vec<Value>, JsCallerError> {
     Ok(serde_json::from_str(&result)?)
 }
 
+pub fn gen_circom_allstr(graph: &[Value], template_name: &str) -> Result<String, JsCallerError> {
+    let code: &'static str = include_str!("circom.js");
+    let mut script = Script::from_string(code)?;
+    let result: String = script.call("genCircomAllstr", (graph, template_name))?;
+    Ok(result)
+}
+
 pub fn get_accepted_state(dfa_val: &[Value]) -> Option<usize> {
     for i in 0..dfa_val.len() {
         if dfa_val[i]["type"] == "accept" {
@@ -59,8 +66,15 @@ pub fn get_accepted_state(dfa_val: &[Value]) -> Option<usize> {
 pub fn get_max_state(dfa_val: &[Value]) -> Result<usize, JsCallerError> {
     let mut max_state = 0;
     for (i, val) in dfa_val.iter().enumerate() {
-        for (_, next_node_val) in val["edges"].as_object().ok_or(JsCallerError::InvalidEdges(val["edges"].clone()))?.iter() {
-            let next_node = next_node_val.as_u64().ok_or(JsCallerError::InvalidNodeValue(next_node_val.clone()))? as usize;
+        for (_, next_node_val) in val["edges"]
+            .as_object()
+            .ok_or(JsCallerError::InvalidEdges(val["edges"].clone()))?
+            .iter()
+        {
+            let next_node = next_node_val
+                .as_u64()
+                .ok_or(JsCallerError::InvalidNodeValue(next_node_val.clone()))?
+                as usize;
             if next_node > max_state {
                 max_state = next_node;
             }
@@ -69,7 +83,12 @@ pub fn get_max_state(dfa_val: &[Value]) -> Result<usize, JsCallerError> {
     Ok(max_state)
 }
 
-pub fn add_graph_nodes(dfa_val: &[Value], graph: &mut Graph<bool, String, Directed, usize>, last_max_state: Option<usize>, next_max_state: usize) -> Result<(), JsCallerError> {
+pub fn add_graph_nodes(
+    dfa_val: &[Value],
+    graph: &mut Graph<bool, String, Directed, usize>,
+    last_max_state: Option<usize>,
+    next_max_state: usize,
+) -> Result<(), JsCallerError> {
     let first_new_state = match last_max_state {
         Some(v) => v + 1,
         None => 0,
@@ -79,8 +98,15 @@ pub fn add_graph_nodes(dfa_val: &[Value], graph: &mut Graph<bool, String, Direct
     }
 
     for (i, val) in dfa_val.iter().enumerate() {
-        for (key, next_node_val) in val["edges"].as_object().ok_or(JsCallerError::InvalidEdges(val["edges"].clone()))?.iter() {
-            let next_node = next_node_val.as_u64().ok_or(JsCallerError::InvalidNodeValue(next_node_val.clone()))? as usize;
+        for (key, next_node_val) in val["edges"]
+            .as_object()
+            .ok_or(JsCallerError::InvalidEdges(val["edges"].clone()))?
+            .iter()
+        {
+            let next_node = next_node_val
+                .as_u64()
+                .ok_or(JsCallerError::InvalidNodeValue(next_node_val.clone()))?
+                as usize;
             if let Some(max) = last_max_state {
                 if i <= max && next_node <= max {
                     continue;
@@ -105,13 +131,25 @@ pub fn dfa_to_regex_def_text(dfa_val: &[Value]) -> Result<String, JsCallerError>
     text += &format!("{}\n", accepted_state.to_string());
     text += &format!("{}\n", max_state.to_string());
     for (i, val) in dfa_val.iter().enumerate() {
-        for (key, next_node_val) in val["edges"].as_object().ok_or(JsCallerError::InvalidEdges(val["edges"].clone()))?.iter() {
+        for (key, next_node_val) in val["edges"]
+            .as_object()
+            .ok_or(JsCallerError::InvalidEdges(val["edges"].clone()))?
+            .iter()
+        {
             let key_list: Vec<String> = serde_json::from_str(&key)?;
             for key_char in key_list.iter() {
                 let key_char: char = key_char.chars().collect::<Vec<char>>()[0];
-                let next_node = next_node_val.as_u64().ok_or(JsCallerError::InvalidNodeValue(next_node_val.clone()))? as usize;
+                let next_node = next_node_val
+                    .as_u64()
+                    .ok_or(JsCallerError::InvalidNodeValue(next_node_val.clone()))?
+                    as usize;
                 // println!("i {} next {} char {}", i, next_node, key_char as u8);
-                text += &format!("{} {} {}\n", i.to_string(), next_node.to_string(), (key_char as u8).to_string());
+                text += &format!(
+                    "{} {} {}\n",
+                    i.to_string(),
+                    next_node.to_string(),
+                    (key_char as u8).to_string()
+                );
             }
         }
     }

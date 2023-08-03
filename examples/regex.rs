@@ -1,6 +1,6 @@
+///! A circuit in this example verifies that the input string satisfies the regex of "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+." and exposes the substring matching with "(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)" to instances (public inputs).
 use halo2_base::gates::flex_gate::FlexGateConfig;
 use halo2_base::halo2_proofs::circuit::Layouter;
-///! A circuit in this example verifies that the input string satisfies the regex of "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+." and exposes the substring matching with "(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)" to instances (public inputs).
 use halo2_base::halo2_proofs::plonk::{ConstraintSystem, Error};
 use halo2_base::halo2_proofs::{
     circuit::SimpleFloorPlanner,

@@ -1,4 +1,13 @@
-// original: https://github.com/zkemail/zk-email-verify/blob/main/regex_to_circom/regex_to_dfa.js
+// original: https://github.com/zkemail/zk-email-verify/blob/fix/update-circom-imports/libs/regex_to_circom/regex_to_dfa.js
+const a2z_nosep = "abcdefghijklmnopqrstuvwxyz";
+const A2Z_nosep = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const a2f_nosep = "abcdef";
+const A2F_nosep = "ABCDEF";
+const r0to9_nosep = "0123456789";
+const escapeMap = { n: "\n", r: "\r", t: "\t", v: "\v", f: "\f" };
+const whitespace = Object.values(escapeMap);
+const slash_s = whitespace.join("|");
+
 function catchAllRegexStr() {
     return "(0|1|2|3|4|5|6|7|8|9|a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|!|\"|#|$|%|&|'|\\(|\\)|\\*|\\+|,|-|.|/|:|;|<|=|>|\\?|@|[|\\\\|]|^|_|`|{|\\||}|~| |\t|\n|\r|\x0b|\x0c)";
 }
@@ -26,26 +35,14 @@ function formatRegexPrintable(s) {
         .replaceAll("|$|", "|\\$|")
         .replaceAll("|^|", "|\\^|");
 }
+
 function regexToDfa(regex) {
     // console.log(regex);
     // const catch_all = catchAllRegexStr();
     // regex = `(${catch_all}+)?Content-Type: text/plain; charset="UTF-8"\r\n\r\n`;
     // regex = "((0|1|2|3|4|5|6|7|8|9|a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|!|\"|#|\\$|%|&|'|\\(|\\)|\\*|\\+|,|-|\\.|\\/|:|;|<|=|>|\\?|@|\\[|\\\\|\\]|\\^|_|`|{|\\||}|~| |\t|\n|\r|\x0b|\x0c)+)??Content-Type: text\\/plain; charset=\"UTF-8\"\r\n\r\n";
-    function toNature(col) {
-        var i,
-            j,
-            base = "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-            result = 0;
-        if ("1" <= col[0] && col[0] <= "9") {
-            result = parseInt(col, 10);
-        } else {
-            for (i = 0, j = col.length - 1; i < col.length; i += 1, j -= 1) {
-                result += Math.pow(base.length, j) * (base.indexOf(col[i]) + 1);
-            }
-        }
-        return result;
-    }
 
+    // regex = regexToMinDFASpec(regex);
     let nfa = regexToNfa(regex);
     let dfa = minDfa(nfaToDfa(nfa));
 
@@ -91,6 +88,129 @@ function regexToDfa(regex) {
     // console.log(JSON.stringify(graph));
     return JSON.stringify(graph);
 }
+
+// // Note that this is not complete and very case specific i.e. can only handle a-z and a-f, and not a-c.
+// // This function expands [] sections to convert values for https://zkregex.com/min_dfa
+// // The input is a regex with [] and special characters (i.e. the first line of min_dfa tool)
+// // The output is expanded regexes without any special characters
+// function regexToMinDFASpec(str) {
+//     // Replace all A-Z with A2Z etc
+//     // TODO: Upstream this to min_dfa
+//     let combined_nosep = str
+//         .replaceAll("A-Z", A2Z_nosep)
+//         .replaceAll("a-z", a2z_nosep)
+//         .replaceAll("A-F", A2F_nosep)
+//         .replaceAll("a-f", a2f_nosep)
+//         .replaceAll("0-9", r0to9_nosep)
+//         .replaceAll("\\w", A2Z_nosep + r0to9_nosep + a2z_nosep + "_")
+//         .replaceAll("\\d", r0to9_nosep)
+//         .replaceAll("\\s", slash_s);
+//     // .replaceAll("\\w", A2Z_nosep + r0to9_nosep + a2z_nosep); // I think that there's also an underscore here
+
+//     function addPipeInsideBrackets(str) {
+//         let result = "";
+//         let insideBrackets = false;
+//         for (let i = 0; i < str.length; i++) {
+//             if (str[i] === "[") {
+//                 result += str[i];
+//                 insideBrackets = true;
+//                 continue;
+//             } else if (str[i] === "]") {
+//                 insideBrackets = false;
+//             }
+//             let str_to_add = str[i];
+//             if (str[i] === "\\") {
+//                 i++;
+//                 str_to_add += str[i];
+//             }
+//             result += insideBrackets ? "|" + str_to_add : str_to_add;
+//         }
+//         return result.replaceAll("[|", "[").replaceAll("[", "(").replaceAll("]", ")");
+//     }
+
+//     //   function makeCurlyBracesFallback(str) {
+//     //     let result = "";
+//     //     let insideBrackets = false;
+//     //     for (let i = 0; i < str.length; i++) {
+//     //       if (str[i] === "{") {
+//     //         result += str[i];
+//     //         insideBrackets = true;
+//     //         continue;
+//     //       } else if (str[i] === "}") {
+//     //         insideBrackets = false;
+//     //       }
+//     //       result += insideBrackets ? "|" + str[i] : str[i];
+//     //     }
+//     //     return result.replaceAll("[|", "[").replaceAll("[", "(").replaceAll("]", ")");
+//     //   }
+
+//     function checkIfBracketsHavePipes(str) {
+//         let result = true;
+//         let insideBrackets = false;
+//         let insideParens = 0;
+//         let indexAt = 0;
+//         for (let i = 0; i < str.length; i++) {
+//             if (indexAt >= str.length) break;
+//             if (str[indexAt] === "[") {
+//                 insideBrackets = true;
+//                 indexAt++;
+//                 continue;
+//             } else if (str[indexAt] === "]") {
+//                 insideBrackets = false;
+//             }
+//             if (str[indexAt] === "(") {
+//                 insideParens++;
+//             } else if (str[indexAt] === ")") {
+//                 insideParens--;
+//             }
+//             if (insideBrackets) {
+//                 if (str[indexAt] === "|") {
+//                     indexAt++;
+//                 } else {
+//                     result = false;
+//                     return result;
+//                 }
+//             }
+//             if (!insideParens && str[indexAt] === "|") {
+//                 console.log("Error: | outside of parens!");
+//             }
+//             if (str[indexAt] === "\\") {
+//                 indexAt++;
+//             }
+//             indexAt++;
+//         }
+//         return result;
+//     }
+
+//     let combined;
+//     if (!checkIfBracketsHavePipes(combined_nosep)) {
+//         // console.log("Adding pipes within brackets between everything!");
+//         combined = addPipeInsideBrackets(combined_nosep);
+//         if (!checkIfBracketsHavePipes(combined)) {
+//             console.log("Did not add brackets correctly!");
+//         }
+//     } else {
+//         combined = combined_nosep;
+//     }
+
+//     return combined;
+// }
+
+function toNature(col) {
+    var i,
+        j,
+        base = "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        result = 0;
+    if ("1" <= col[0] && col[0] <= "9") {
+        result = parseInt(col, 10);
+    } else {
+        for (i = 0, j = col.length - 1; i < col.length; i += 1, j -= 1) {
+            result += Math.pow(base.length, j) * (base.indexOf(col[i]) + 1);
+        }
+    }
+    return result;
+}
+
 
 /**
  * Try parsing simple regular expression to syntax tree.
@@ -233,8 +353,10 @@ function parseRegex(text) {
     let new_text = [];
     let i = 0;
     while (i < text.length) {
-        if (text[i] == "\\") {
-            new_text.push([text[i + 1]]);
+        if (text[i] === "\\") {
+            // const escapeMap = { n: "\n", r: "\r", t: "\t", v: "\v", f: "\f", "^": String.fromCharCode(128) };
+            const char = text[i + 1];
+            new_text.push([escapeMap[char] || char]);
             i += 2;
         } else {
             new_text.push(text[i]);
@@ -338,7 +460,7 @@ function nfaToDfa(nfa) {
             top = stack.pop();
             // If top is of type string and starts with "Error" then return error
             if (typeof top === "string" && top[0] === "E") {
-                // console.log(top);
+                console.log(top);
                 continue;
             }
             for (i = 0; i < top.edges.length; i += 1) {
@@ -638,4 +760,3 @@ function minDfa(dfa) {
         partitions = hopcroft(symbols, idMap, revEdges);
     return buildMinNfa(dfa, partitions, idMap, revEdges);
 }
-

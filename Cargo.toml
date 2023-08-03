@@ -30,3 +30,18 @@ itertools = "0.10.3"
 [dev-dependencies]
 rand = "0.8.5"
 itertools = "0.10.3"
+snark-verifier = { git = "https://github.com/zkemail/snark-verifier.git", version = "0.1.0", branch = "main", default-features = false, features = [
+    "loader_evm",
+    "loader_halo2",
+    "halo2-pse",
+] }
+snark-verifier-sdk = { git = "https://github.com/zkemail/snark-verifier.git", version = "0.0.1", branch = "main", default-features = false, features = [
+    "loader_evm",
+    "loader_halo2",
+    "halo2-pse",
+] }
+criterion = { version = "0.3" }
+
+[[bench]]
+name = "regex_evm"
+harness = false
