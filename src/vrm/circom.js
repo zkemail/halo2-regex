@@ -39,10 +39,10 @@ function genCircomAllstr(graph_json, template_name) {
             // const prev_i = elem[1];
             const eq_outputs = [];
             const vals = new Set(k);
-            if (vals.has("^")) {
-                vals.delete("^");
-                lines.push("\t\ti==0;");
-            }
+            // if (vals.has("^")) {
+            //     vals.delete("^");
+            //     lines.push("\t\ti==0;");
+            // }
             if (vals.isSuperset(uppercase)) {
                 vals.difference(uppercase);
                 lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
