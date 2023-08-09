@@ -26,9 +26,10 @@ function formatRegexPrintable(s) {
     return escaped_string
         .replaceAll("\\\\\\\\", "\\")
         .replaceAll("\\\\", "\\")
-        .replaceAll("\\|", "\\\\|")
         .replaceAll("/", "\\/")
         .replaceAll("\u000b", "\\♥")
+        .replaceAll("^", "\\^")
+        .replaceAll("$", "\\$")
         .replaceAll("|[|", "|\\[|")
         .replaceAll("|]|", "|\\]|")
         .replaceAll("|.|", "|\\.|")

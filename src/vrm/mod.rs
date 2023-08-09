@@ -340,7 +340,14 @@ impl DecomposedRegexConfig {
             if let Some(edge) = graph.find_edge(node, node) {
                 let str = graph.edge_weight(edge).unwrap().as_str();
                 let bytes = str.as_bytes();
-                self_nodes_char.insert(node.index(), bytes[0] as char);
+                // println!("byte {} {}", bytes[0], "^".as_bytes()[0]);
+                // let char = if bytes[0] == b"^"[0] || bytes[0] == b"$"[0] {
+                //     0 as char
+                // } else {
+                //     bytes[0] as char
+                // };
+                // println!("char {}", char);
+                self_nodes_char.insert(node.index(), bytes[0]);
             }
         }
 
@@ -446,8 +453,8 @@ impl DecomposedRegexConfig {
                     for pre_path_idx in 0..=path_idx {
                         if graph
                             .find_edge(
-                                NodeIndex::from(path_states[path_idx + 1]),
                                 NodeIndex::from(path_states[pre_path_idx]),
+                                NodeIndex::from(path_states[path_idx + 1]),
                             )
                             .is_some()
                         {
@@ -460,8 +467,8 @@ impl DecomposedRegexConfig {
                 if self_nodes.contains(&path_states[path_states.len() - 1]) {
                     let part_index = public_config_indexes[substr_idx];
                     let part_regex = &part_regexes[part_index];
-                    let substr =
-                        substr + &self_nodes_char[&path_states[path_states.len() - 1]].to_string();
+                    let byte = self_nodes_char[&path_states[path_states.len() - 1]];
+                    let substr = substr + &(byte as char).to_string();
                     if part_regex.is_match(&substr).unwrap() {
                         defs.insert((
                             path_states[path_states.len() - 1],
@@ -504,7 +511,6 @@ impl DecomposedRegexConfig {
         //         writer.write_fmt(format_args!("{} {}\n", cur, next))?;
         //     }
         // }
-        // println!("pathes {:?}", pathes);
         Ok((
             substr_defs_array,
             substr_endpoints_array,
@@ -524,13 +530,24 @@ impl DecomposedRegexConfig {
         for str in path_strs.into_iter() {
             let first_chars = str.as_bytes();
             concat_str += &(first_chars[0] as char).to_string();
+            // println!("concat_str {:?}", concat_str.as_bytes());
         }
         let index_ends = part_regexes
             .iter()
             .map(|regex| {
                 // println!(
+                //     "whitespace {:?}",
+                //     Regex::new(r#"a(0|1|2|3|4|5|6|7|8|9|a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|!|\"|#|%|&|'|\(|\)|\*|\+|,|-|\.|\/|:|;|<|=|>|\?|@|\[|\\|\]|_|`|{|}|~|\t| )+"#)
+                //         .unwrap()
+                //         .find("a")
+                //         .unwrap()
+                //         .unwrap()
+                //         .as_str()
+                //         .as_bytes()
+                // );
+                // println!(
                 //     "regex {}, found {:?} end {}",
-                //     regex,
+                //     regex.as_str(),
                 //     regex
                 //         .find(&concat_str)
                 //         .unwrap()
@@ -539,7 +556,6 @@ impl DecomposedRegexConfig {
                 //         .as_bytes(),
                 //     regex.find(&concat_str).unwrap().unwrap().end()
                 // );
-                // println!("regex {}", regex);
                 let found = regex.find(&concat_str).unwrap().unwrap();
                 if found.start() == found.end() {
                     found.end() + 1

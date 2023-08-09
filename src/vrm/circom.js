@@ -37,10 +37,12 @@ function genCircomAllstr(graph_json, template_name) {
         for (let prev_i in Object.keys(rev_graph[i])) {
             const k = rev_graph[i][prev_i];
             // const prev_i = elem[1];
-            let vals = k;
             const eq_outputs = [];
-
-            vals = new Set(vals);
+            const vals = new Set(k);
+            if (vals.has("^")) {
+                vals.delete("^");
+                lines.push("\t\ti==0;");
+            }
             if (vals.isSuperset(uppercase)) {
                 vals.difference(uppercase);
                 lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
@@ -138,7 +140,7 @@ function genCircomAllstr(graph_json, template_name) {
         // digits = set(string.digits)
         // vals = set(vals)
     }
-    lines.push("}");
+    lines.push("\t}");
 
     const declarations = [];
     declarations.push(`pragma circom 2.1.5;\ninclude "@zk-email/circuits/regexes/regex_helpers.circom";\n`);
