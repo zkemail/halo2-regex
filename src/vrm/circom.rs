@@ -26,16 +26,32 @@ impl DecomposedRegexConfig {
         let (substr_defs_array, _, _) = self.extract_substr_ids(&dfa_val)?;
         for (idx, defs) in substr_defs_array.into_iter().enumerate() {
             // let mut valid_next_states = HashSet::new();
+            let num_defs = defs.len();
+            circom += &format!("\tsignal is_substr{}[msg_bytes][{}];\n", idx, num_defs + 1);
             circom += &format!("\tsignal output reveal{}[msg_bytes];\n", idx);
             circom += "\tfor (var i = 0; i < msg_bytes; i++) {\n";
-            circom += &format!("\t\treveal{} <== in[i+1] * (", idx);
+            circom += &format!("\t\tis_substr{}[i][0] <== 0;\n", idx);
+            // circom += &format!("\t\tis_substr{}[i] <== ", idx);
             for (j, (cur, next)) in defs.iter().enumerate() {
-                circom += &format!("states[i+1][{}] * states[i+2][{}]", cur, next);
-                if j != defs.len() - 1 {
-                    circom += " + ";
-                }
+                circom += &format!(
+                    "\t\tis_substr{}[i][{}] <== is_substr{}[i][{}] + ",
+                    idx,
+                    j + 1,
+                    idx,
+                    j
+                );
+                circom += &format!("states[i+1][{}] * states[i+2][{}];\n", cur, next);
+                // if j != defs.len() - 1 {
+                //     circom += " + ";
+                // } else {
+                //     circom += ";\n";
+                // }
             }
-            circom += ");\n\t}\n";
+            circom += &format!(
+                "\t\treveal{}[i] <== in[i+1] * is_substr{}[i][{}];\n",
+                idx, idx, num_defs
+            );
+            circom += "\t}\n";
         }
         circom += "}";
         let mut circom_file = File::create(circom_path)?;

@@ -1,5 +1,6 @@
 function genCircomAllstr(graph_json, template_name) {
     const N = graph_json.length;
+    // console.log(JSON.stringify(graph_json));
     const graph = Array(N).fill({});
     const rev_graph = Array(N).fill({});
     let accept_nodes = new Set();
@@ -32,6 +33,9 @@ function genCircomAllstr(graph_json, template_name) {
     const uppercase = new Set("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     const lowercase = new Set("abcdefghijklmnopqrstuvwxyz");
     const digits = new Set("0123456789");
+    const symbols1 = new Set([":", ";", "<", "=", ">", "?", "@"]);
+    const symbols2 = new Set(["[", "\\", "]", "^", "_", "`"]);
+    const symbols3 = new Set(["{", "|", "}", "~"]);
     for (let i = 1; i < N; i++) {
         const outputs = [];
         for (let prev_i in Object.keys(rev_graph[i])) {
@@ -39,64 +43,162 @@ function genCircomAllstr(graph_json, template_name) {
             // const prev_i = elem[1];
             const eq_outputs = [];
             const vals = new Set(k);
-            // if (vals.has("^")) {
-            //     vals.delete("^");
-            //     lines.push("\t\ti==0;");
+            if (vals.size == 0) {
+                continue;
+            }
+            const min_maxs = [];
+            for (let subsets of [
+                [digits, 47, 58],
+                [symbols1, 57, 65],
+                [uppercase, 64, 91],
+                [symbols2, 90, 97],
+                [lowercase, 96, 123],
+                [symbols3, 122, 127]
+            ]) {
+                const subset = subsets[0];
+                const min = subsets[1];
+                const max = subsets[2];
+                if (vals.isSuperset(subset)) {
+                    vals.difference(subset);
+                    if (min_maxs.length == 0) {
+                        min_maxs.push([min, max]);
+                    } else {
+                        const last = min_maxs[min_maxs.length - 1];
+                        if (last[1] - 1 == min) {
+                            min_maxs[min_maxs.length - 1][1] = max;
+                        } else {
+                            min_maxs.push([min, max]);
+                        }
+                    }
+                }
+            }
+
+            for (let min_max of min_maxs) {
+                lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
+                lines.push(`\t\tlt[${lt_i}][i].in[0] <== ${min_max[0]};`);
+                lines.push(`\t\tlt[${lt_i}][i].in[1] <== in[i];`);
+
+                lines.push(`\t\tlt[${lt_i + 1}][i] = LessThan(8);`);
+                lines.push(`\t\tlt[${lt_i + 1}][i].in[0] <== in[i];`);
+                lines.push(`\t\tlt[${lt_i + 1}][i].in[1] <== ${min_max[1]};`);
+
+                lines.push(`\t\tand[${and_i}][i] = AND();`);
+                lines.push(`\t\tand[${and_i}][i].a <== lt[${lt_i}][i].out;`);
+                lines.push(`\t\tand[${and_i}][i].b <== lt[${lt_i + 1}][i].out;`);
+
+                eq_outputs.push(['and', and_i]);
+                lt_i += 2
+                and_i += 1
+            }
+
+            // if (vals.isSuperset(uppercase)) {
+            //     vals.difference(uppercase);
+            //     lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[0] <== 64;`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[1] <== in[i];`);
+
+            //     lines.push(`\t\tlt[${lt_i + 1}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[0] <== in[i];`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[1] <== 91;`);
+
+            //     lines.push(`\t\tand[${and_i}][i] = AND();`);
+            //     lines.push(`\t\tand[${and_i}][i].a <== lt[${lt_i}][i].out;`);
+            //     lines.push(`\t\tand[${and_i}][i].b <== lt[${lt_i + 1}][i].out;`);
+
+            //     eq_outputs.push(['and', and_i]);
+            //     lt_i += 2
+            //     and_i += 1
             // }
-            if (vals.isSuperset(uppercase)) {
-                vals.difference(uppercase);
-                lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
-                lines.push(`\t\tlt[${lt_i}][i].in[0] <== 64;`);
-                lines.push(`\t\tlt[${lt_i}][i].in[1] <== in[i];`);
+            // if (vals.isSuperset(lowercase)) {
+            //     vals.difference(lowercase);
+            //     lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[0] <== 96;`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[1] <== in[i];`);
 
-                lines.push(`\t\tlt[${lt_i + 1}][i] = LessThan(8);`);
-                lines.push(`\t\tlt[${lt_i + 1}][i].in[0] <== in[i];`);
-                lines.push(`\t\tlt[${lt_i + 1}][i].in[1] <== 91;`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[0] <== in[i];`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[1] <== 123;`);
 
-                lines.push(`\t\tand[${and_i}][i] = AND();`);
-                lines.push(`\t\tand[${and_i}][i].a <== lt[${lt_i}][i].out;`);
-                lines.push(`\t\tand[${and_i}][i].b <== lt[${lt_i + 1}][i].out;`);
+            //     lines.push(`\t\tand[${and_i}][i] = AND();`);
+            //     lines.push(`\t\tand[${and_i}][i].a <== lt[${lt_i}][i].out;`);
+            //     lines.push(`\t\tand[${and_i}][i].b <== lt[${lt_i + 1}][i].out;`);
 
-                eq_outputs.push(['and', and_i]);
-                lt_i += 2
-                and_i += 1
-            }
-            if (vals.isSuperset(lowercase)) {
-                vals.difference(lowercase);
-                lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
-                lines.push(`\t\tlt[${lt_i}][i].in[0] <== 96;`);
-                lines.push(`\t\tlt[${lt_i}][i].in[1] <== in[i];`);
+            //     eq_outputs.push(['and', and_i]);
+            //     lt_i += 2
+            //     and_i += 1
+            // }
+            // if (vals.isSuperset(digits)) {
+            //     vals.difference(digits);
+            //     lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[0] <== 47;`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[1] <== in[i];`);
 
-                lines.push(`\t\tlt[${lt_i + 1}][i] = LessThan(8);`);
-                lines.push(`\t\tlt[${lt_i + 1}][i].in[0] <== in[i];`);
-                lines.push(`\t\tlt[${lt_i + 1}][i].in[1] <== 123;`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[0] <== in[i];`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[1] <== 58;`);
 
-                lines.push(`\t\tand[${and_i}][i] = AND();`);
-                lines.push(`\t\tand[${and_i}][i].a <== lt[${lt_i}][i].out;`);
-                lines.push(`\t\tand[${and_i}][i].b <== lt[${lt_i + 1}][i].out;`);
+            //     lines.push(`\t\tand[${and_i}][i] = AND();`);
+            //     lines.push(`\t\tand[${and_i}][i].a <== lt[${lt_i}][i].out;`);
+            //     lines.push(`\t\tand[${and_i}][i].b <== lt[${lt_i + 1}][i].out;`);
 
-                eq_outputs.push(['and', and_i]);
-                lt_i += 2
-                and_i += 1
-            }
-            if (vals.isSuperset(digits)) {
-                vals.difference(digits);
-                lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
-                lines.push(`\t\tlt[${lt_i}][i].in[0] <== 47;`);
-                lines.push(`\t\tlt[${lt_i}][i].in[1] <== in[i];`);
+            //     eq_outputs.push(['and', and_i]);
+            //     lt_i += 2
+            //     and_i += 1
+            // }
+            // if (vals.isSuperset(symbols1)) {
+            //     vals.difference(symbols1);
+            //     lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[0] <== 57;`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[1] <== in[i];`);
 
-                lines.push(`\t\tlt[${lt_i + 1}][i] = LessThan(8);`);
-                lines.push(`\t\tlt[${lt_i + 1}][i].in[0] <== in[i];`);
-                lines.push(`\t\tlt[${lt_i + 1}][i].in[1] <== 58;`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[0] <== in[i];`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[1] <== 65;`);
 
-                lines.push(`\t\tand[${and_i}][i] = AND();`);
-                lines.push(`\t\tand[${and_i}][i].a <== lt[${lt_i}][i].out;`);
-                lines.push(`\t\tand[${and_i}][i].b <== lt[${lt_i + 1}][i].out;`);
+            //     lines.push(`\t\tand[${and_i}][i] = AND();`);
+            //     lines.push(`\t\tand[${and_i}][i].a <== lt[${lt_i}][i].out;`);
+            //     lines.push(`\t\tand[${and_i}][i].b <== lt[${lt_i + 1}][i].out;`);
 
-                eq_outputs.push(['and', and_i]);
-                lt_i += 2
-                and_i += 1
-            }
+            //     eq_outputs.push(['and', and_i]);
+            //     lt_i += 2
+            //     and_i += 1
+            // }
+            // if (vals.isSuperset(symbols2)) {
+            //     vals.difference(symbols2);
+            //     lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[0] <== 90;`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[1] <== in[i];`);
+
+            //     lines.push(`\t\tlt[${lt_i + 1}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[0] <== in[i];`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[1] <== 97;`);
+
+            //     lines.push(`\t\tand[${and_i}][i] = AND();`);
+            //     lines.push(`\t\tand[${and_i}][i].a <== lt[${lt_i}][i].out;`);
+            //     lines.push(`\t\tand[${and_i}][i].b <== lt[${lt_i + 1}][i].out;`);
+
+            //     eq_outputs.push(['and', and_i]);
+            //     lt_i += 2
+            //     and_i += 1
+            // }
+            // if (vals.isSuperset(symbols3)) {
+            //     vals.difference(symbols3);
+            //     lines.push(`\t\tlt[${lt_i}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[0] <== 122;`);
+            //     lines.push(`\t\tlt[${lt_i}][i].in[1] <== in[i];`);
+
+            //     lines.push(`\t\tlt[${lt_i + 1}][i] = LessThan(8);`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[0] <== in[i];`);
+            //     lines.push(`\t\tlt[${lt_i + 1}][i].in[1] <== 127;`);
+
+            //     lines.push(`\t\tand[${and_i}][i] = AND();`);
+            //     lines.push(`\t\tand[${and_i}][i].a <== lt[${lt_i}][i].out;`);
+            //     lines.push(`\t\tand[${and_i}][i].b <== lt[${lt_i + 1}][i].out;`);
+
+            //     eq_outputs.push(['and', and_i]);
+            //     lt_i += 2
+            //     and_i += 1
+            // }
             for (let c of vals) {
                 if (c.length != 1) {
                     throw new Error("c.length must be 1");
@@ -126,13 +228,13 @@ function genCircomAllstr(graph_json, template_name) {
         }
 
         if (outputs.length == 1) {
-            lines.push(`\t\tstates[i+1][${i}] = and[${outputs[0]}][i].out;`);
+            lines.push(`\t\tstates[i+1][${i}] <== and[${outputs[0]}][i].out;`);
         } else if (outputs.length > 1) {
             lines.push(`\t\tmulti_or[${multi_or_i}][i] = MultiOR(${outputs.length});`);
             for (let output_i = 0; output_i < outputs.length; output_i++) {
                 lines.push(`\t\tmulti_or[${multi_or_i}][i].in[${output_i}] <== and[${outputs[output_i]}][i].out;`);
             }
-            lines.push(`\t\tstates[i+1][${i}] = multi_or[${multi_or_i}][i].out;`);
+            lines.push(`\t\tstates[i+1][${i}] <== multi_or[${multi_or_i}][i].out;`);
             multi_or_i += 1
         }
         // uppercase = set(string.ascii_uppercase)
