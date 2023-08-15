@@ -32,6 +32,7 @@ struct ExampleConfig<F: PrimeField> {
 struct ExampleCircuit<F: PrimeField> {
     // The bytes of the input string.
     characters: Vec<u8>,
+    regex_defs: Vec<RegexDefs>,
     _marker: PhantomData<F>,
 }
 
@@ -40,6 +41,8 @@ impl<F: PrimeField> ExampleCircuit<F> {
     const NUM_ADVICE: usize = 2;
     /// The number of fix columns in [`FlexGateConfig`].
     const NUM_FIXED: usize = 1;
+    const FIRST_STATE: u64 = 0;
+    const DUMMY_STATE: u64 = u64::MAX;
 }
 
 impl<F: PrimeField> Circuit<F> for ExampleCircuit<F> {
@@ -50,14 +53,14 @@ impl<F: PrimeField> Circuit<F> for ExampleCircuit<F> {
     fn without_witnesses(&self) -> Self {
         Self {
             characters: vec![],
-            // correct_substrs: vec![],
+            regex_defs: self.regex_defs.clone(),
             _marker: PhantomData,
         }
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        let all_regex_def1 = AllstrRegexDef::read_from_text("./examples/ex_allstr.txt");
-        let substr_def1 = SubstrRegexDef::read_from_text("./examples/ex_substr_id1.txt");
+        // let all_regex_def1 = AllstrRegexDef::read_from_text("./examples/ex_allstr.txt");
+        // let substr_def1 = SubstrRegexDef::read_from_text("./examples/ex_substr_id1.txt");
         let gate = FlexGateConfig::<F>::configure(
             meta,
             halo2_base::gates::flex_gate::GateStrategy::Vertical,
@@ -66,11 +69,18 @@ impl<F: PrimeField> Circuit<F> for ExampleCircuit<F> {
             0,
             K,
         );
-        let regex_defs = vec![RegexDefs {
-            allstr: all_regex_def1,
-            substrs: vec![substr_def1],
-        }];
-        let inner = RegexVerifyConfig::configure(meta, MAX_STRING_LEN, gate, regex_defs);
+        // let regex_defs = vec![RegexDefs {
+        //     allstr: all_regex_def1,
+        //     substrs: vec![substr_def1],
+        // }];
+        let inner = RegexVerifyConfig::configure(
+            meta,
+            MAX_STRING_LEN,
+            gate,
+            1,
+            Self::FIRST_STATE,
+            Self::DUMMY_STATE,
+        );
         let instances = meta.instance_column();
         meta.enable_equality(instances);
         Self::Config { inner, instances }
@@ -82,7 +92,7 @@ impl<F: PrimeField> Circuit<F> for ExampleCircuit<F> {
         mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
         // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+( and (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+)*."
-        config.inner.load(&mut layouter)?;
+        config.inner.load(&mut layouter, &self.regex_defs)?;
 
         // println!("Synthesize being called...");
         let mut first_pass = SKIP_FIRST_PASS;
@@ -109,7 +119,9 @@ impl<F: PrimeField> Circuit<F> for ExampleCircuit<F> {
                     },
                 );
                 let ctx = &mut aux;
-                let result = config.inner.match_substrs(ctx, &self.characters)?;
+                let result = config
+                    .inner
+                    .match_substrs(ctx, &self.characters, &self.regex_defs)?;
 
                 for (assigned_char, assigned_substr_id) in result
                     .masked_characters
@@ -182,12 +194,19 @@ fn main() {
             &[Path::new("./examples/ex_substr_id1.txt").to_path_buf()],
         )
         .unwrap();
+    let all_regex_def1 = AllstrRegexDef::read_from_text("./examples/ex_allstr.txt");
+    let substr_def1 = SubstrRegexDef::read_from_text("./examples/ex_substr_id1.txt");
+    let regex_defs = vec![RegexDefs {
+        allstr: all_regex_def1,
+        substrs: vec![substr_def1],
+    }];
     let characters: Vec<u8> = "email was meant for @vitalik."
         .chars()
         .map(|c| c as u8)
         .collect();
     let circuit = ExampleCircuit::<Fr> {
         characters,
+        regex_defs,
         _marker: PhantomData,
     };
     let mut masked_chars = [Fr::from(0); MAX_STRING_LEN];

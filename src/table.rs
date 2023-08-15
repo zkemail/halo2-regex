@@ -21,6 +21,7 @@ pub struct RegexTableConfig<F: PrimeField> {
     pub(crate) endpoints_substr_ids: TableColumn,
     pub(crate) start_states: TableColumn,
     pub(crate) end_states: TableColumn,
+    dummy_state_val: u64,
     _marker: PhantomData<F>,
 }
 
@@ -28,7 +29,7 @@ impl<F: PrimeField> RegexTableConfig<F> {
     /// Configure a new [`RegexTableConfig`].
     /// # Arguments
     /// * `meta` - a constrain system in which contraints are defined.
-    pub fn configure(meta: &mut ConstraintSystem<F>) -> Self {
+    pub fn configure(meta: &mut ConstraintSystem<F>, dummy_state_val: u64) -> Self {
         let characters = meta.lookup_table_column();
         let cur_states = meta.lookup_table_column();
         let next_states = meta.lookup_table_column();
@@ -45,6 +46,7 @@ impl<F: PrimeField> RegexTableConfig<F> {
             endpoints_substr_ids,
             start_states,
             end_states,
+            dummy_state_val,
             _marker: PhantomData,
         }
     }
@@ -64,7 +66,7 @@ impl<F: PrimeField> RegexTableConfig<F> {
         regex_defs: &RegexDefs,
         substr_id_offset: usize,
     ) -> Result<usize, Error> {
-        let dummy_state = regex_defs.allstr.largest_state_val + 1;
+        let dummy_state = self.dummy_state_val;
         layouter.assign_table(
             || "load transition table",
             |mut table| {

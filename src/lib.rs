@@ -49,6 +49,7 @@ pub mod vrm;
 use crate::table::RegexTableConfig;
 use crate::{AllstrRegexDef, RegexDefs, SubstrRegexDef};
 pub use defs::*;
+use halo2_base::halo2_proofs::plonk::Fixed;
 use halo2_base::halo2_proofs::{
     circuit::{AssignedCell, Layouter, Region, SimpleFloorPlanner, Value},
     plonk::{
@@ -98,13 +99,14 @@ pub struct RegexVerifyConfig<F: PrimeField> {
     substr_ids_array: Vec<Column<Advice>>,
     is_start_array: Vec<Column<Advice>>,
     is_end_array: Vec<Column<Advice>>,
+    num_regex_def: usize,
+    first_state_val: u64,
+    dummy_state_val: u64,
     table_array: Vec<RegexTableConfig<F>>,
     q_first: Selector,
     not_q_first: Selector,
     max_chars_size: usize,
     gate: FlexGateConfig<F>,
-    /// A vector of regex definitions applied to the input string.
-    pub regex_defs: Vec<RegexDefs>,
 }
 
 impl<F: PrimeField> RegexVerifyConfig<F> {
@@ -122,9 +124,11 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         meta: &mut ConstraintSystem<F>,
         max_chars_size: usize,
         gate: FlexGateConfig<F>,
-        regex_defs: Vec<RegexDefs>,
+        num_regex_def: usize, // regex_defs: Vec<RegexDefs>,
+        first_state_val: u64,
+        dummy_state_val: u64,
     ) -> Self {
-        let num_regex_def = regex_defs.len();
+        // let num_regex_def = regex_defs.len();
         let characters = meta.advice_column();
         let char_enable = meta.advice_column();
         let states_array = (0..num_regex_def)
@@ -158,7 +162,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         let q_first = meta.complex_selector();
         let not_q_first = meta.complex_selector();
         let table_array = (0..num_regex_def)
-            .map(|_| RegexTableConfig::configure(meta))
+            .map(|_| RegexTableConfig::configure(meta, dummy_state_val))
             .collect::<Vec<RegexTableConfig<F>>>();
         meta.enable_equality(characters);
         meta.enable_equality(char_enable);
@@ -174,10 +178,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                 constraints.push(
                     q_frist.clone()
                         * cur_enable.clone()
-                        * (cur_state
-                            - Expression::Constant(F::from(
-                                regex_defs[idx].allstr.first_state_val,
-                            ))),
+                        * (cur_state - Expression::Constant(F::from(first_state_val))),
                 );
             }
             constraints
@@ -196,7 +197,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
             ]
         });
 
-        for (idx, defs) in regex_defs.iter().enumerate() {
+        for idx in (0..num_regex_def) {
             meta.lookup("lookup characters and their state", |meta| {
                 let enable = meta.query_advice(char_enable, Rotation::cur());
                 let not_enable = Expression::Constant(F::from(1)) - enable.clone();
@@ -206,8 +207,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                 let cur_state = meta.query_advice(states, Rotation::cur());
                 let next_state = meta.query_advice(states, Rotation::next());
                 let substr_id = meta.query_advice(substr_ids, Rotation::cur());
-                let dummy_state_val =
-                    Expression::Constant(F::from(defs.allstr.largest_state_val + 1));
+                let dummy_state_val = Expression::Constant(F::from(dummy_state_val));
                 vec![
                     (
                         enable.clone() * character.clone(),
@@ -233,8 +233,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                 let cur_state = meta.query_advice(states, Rotation::cur());
                 let substr_id = meta.query_advice(substr_ids, Rotation::cur());
                 let is_start = meta.query_advice(is_starts, Rotation::cur());
-                let dummy_state_val =
-                    Expression::Constant(F::from(defs.allstr.largest_state_val + 1));
+                let dummy_state_val = Expression::Constant(F::from(dummy_state_val));
                 let flag = enable.clone() * is_start.clone();
                 let not_flag = Expression::Constant(F::from(1)) - flag.clone();
                 vec![
@@ -258,8 +257,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                 let next_state = meta.query_advice(states, Rotation::next());
                 let substr_id = meta.query_advice(substr_ids, Rotation::cur());
                 let next_is_end = meta.query_advice(is_ends, Rotation::next());
-                let dummy_state_val =
-                    Expression::Constant(F::from(defs.allstr.largest_state_val + 1));
+                let dummy_state_val = Expression::Constant(F::from(dummy_state_val));
                 let flag = enable * next_is_end;
                 let not_flag = Expression::Constant(F::from(1)) - flag.clone();
                 vec![
@@ -283,12 +281,14 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
             substr_ids_array,
             is_start_array,
             is_end_array,
+            num_regex_def,
+            first_state_val,
+            dummy_state_val,
             table_array,
             q_first,
             not_q_first,
             max_chars_size,
             gate,
-            regex_defs,
         }
     }
 
@@ -297,6 +297,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
     /// # Arguments
     /// * `ctx` - a region context.
     /// * `characters` - bytes of the input string.
+    /// * `regex_defs` - a vector of regex definitions applied to the input string.
     ///
     /// # Return values
     /// Return the assigned values as [`AssignedRegexResult`].
@@ -304,10 +305,11 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         &self,
         ctx: &mut Context<'v, F>,
         characters: &[u8],
+        regex_defs: &[RegexDefs],
     ) -> Result<AssignedRegexResult<'a, F>, Error> {
-        let states = self.derive_states(characters);
-        let substr_ids = self.derive_substr_ids(states.as_slice());
-        let (is_starts, is_ends) = self.derive_is_start_end(&states, &substr_ids);
+        let states = self.derive_states(characters, &regex_defs);
+        let substr_ids = self.derive_substr_ids(states.as_slice(), &regex_defs);
+        let (is_starts, is_ends) = self.derive_is_start_end(&states, &substr_ids, &regex_defs);
         // for d_idx in 0..self.regex_defs.len() {
         //     for idx in 0..characters.len() {
         //         println!(
@@ -376,7 +378,8 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
             .map(|_| gate.load_zero(ctx))
             .collect::<Vec<AssignedValue<F>>>();
 
-        for (d_idx, defs) in self.regex_defs.iter().enumerate() {
+        for (d_idx, defs) in regex_defs.iter().enumerate() {
+            debug_assert_eq!(defs.allstr.first_state_val, self.first_state_val);
             let mut state_values = states[d_idx][0..characters.len()]
                 .iter()
                 .map(|state| Value::known(F::from(*state)))
@@ -402,7 +405,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                         is_ends[d_idx][idx],
                     )
                 } else {
-                    (defs.allstr.largest_state_val + 1, false, false)
+                    (self.dummy_state_val, false, false)
                 };
                 state_values.push(Value::known(F::from(state_val)));
                 is_start_values.push(Value::known(F::from(is_start)));
@@ -685,10 +688,14 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
     ///
     /// # Arguments
     /// * `layouter` - a [`Layouter`] in which the lookup tables are loaded.
-    pub fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+    pub fn load(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        regex_defs: &[RegexDefs],
+    ) -> Result<(), Error> {
         let mut substr_id_offset = 1;
         for (idx, table) in self.table_array.iter().enumerate() {
-            substr_id_offset = table.load(layouter, &self.regex_defs[idx], substr_id_offset)?;
+            substr_id_offset = table.load(layouter, &regex_defs[idx], substr_id_offset)?;
         }
         Ok(())
     }
@@ -710,10 +717,14 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         Ok(assigned_value)
     }
 
-    pub(crate) fn derive_states(&self, characters: &[u8]) -> Vec<Vec<u64>> {
+    pub(crate) fn derive_states(
+        &self,
+        characters: &[u8],
+        regex_defs: &[RegexDefs],
+    ) -> Vec<Vec<u64>> {
         let mut states = vec![];
-        for (d_idx, defs) in self.regex_defs.iter().enumerate() {
-            states.push(vec![defs.allstr.first_state_val]);
+        for (d_idx, defs) in regex_defs.iter().enumerate() {
+            states.push(vec![self.first_state_val]);
             for (c_idx, char) in characters.into_iter().enumerate() {
                 let state = states[d_idx][c_idx];
                 let next_state = defs.allstr.state_lookup.get(&(*char, state));
@@ -731,10 +742,14 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         states
     }
 
-    pub(crate) fn derive_substr_ids(&self, states: &[Vec<u64>]) -> Vec<Vec<usize>> {
+    pub(crate) fn derive_substr_ids(
+        &self,
+        states: &[Vec<u64>],
+        regex_defs: &[RegexDefs],
+    ) -> Vec<Vec<usize>> {
         let mut substr_ids: Vec<Vec<usize>> = vec![];
         let mut substr_id_offset = 1;
-        for (d_idx, defs) in self.regex_defs.iter().enumerate() {
+        for (d_idx, defs) in regex_defs.iter().enumerate() {
             substr_ids.push(vec![0; states[d_idx].len() - 1]);
             for state_idx in 0..(states[d_idx].len() - 1) {
                 for (substr_idx, substr_def) in defs.substrs.iter().enumerate() {
@@ -757,11 +772,12 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         &self,
         states: &[Vec<u64>],
         substr_ids: &[Vec<usize>],
+        regex_defs: &[RegexDefs],
     ) -> (Vec<Vec<bool>>, Vec<Vec<bool>>) {
         let mut is_starts_array = vec![];
         let mut is_ends_array = vec![];
         let mut substr_id_offset = 1usize;
-        for (d_idx, defs) in self.regex_defs.iter().enumerate() {
+        for (d_idx, defs) in regex_defs.iter().enumerate() {
             let state_len = states[d_idx].len();
             let mut is_starts = states[d_idx][0..state_len - 1]
                 .iter()
@@ -842,6 +858,7 @@ mod test {
     struct TestCircuit1<F: PrimeField> {
         // Since this is only relevant for the witness, we can opt to make this whatever convenient type we want
         characters: Vec<u8>,
+        // regex_defs: Vec<RegexDefs>,
         correct_substrs: Vec<(usize, String)>,
         _marker: PhantomData<F>,
     }
@@ -849,6 +866,8 @@ mod test {
     impl<F: PrimeField> TestCircuit1<F> {
         const NUM_ADVICE: usize = 2;
         const NUM_FIXED: usize = 1;
+        const FIRST_STATE: u64 = 0;
+        const DUMMY_STATE: u64 = u64::MAX;
     }
 
     impl<F: PrimeField> Circuit<F> for TestCircuit1<F> {
@@ -859,20 +878,21 @@ mod test {
         fn without_witnesses(&self) -> Self {
             Self {
                 characters: vec![],
+                // regex_defs: self.regex_defs.clone(),
                 correct_substrs: vec![],
                 _marker: PhantomData,
             }
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let all_regex_def1 =
-                AllstrRegexDef::read_from_text("./test_regexes/regex1_test_lookup.txt");
-            let substr_def1 =
-                SubstrRegexDef::read_from_text("./test_regexes/substr1_test_lookup.txt");
-            let all_regex_def2 =
-                AllstrRegexDef::read_from_text("./test_regexes/regex2_test_lookup.txt");
-            let substr_def2 =
-                SubstrRegexDef::read_from_text("./test_regexes/substr2_test_lookup.txt");
+            // let all_regex_def1 =
+            //     AllstrRegexDef::read_from_text("./test_regexes/regex1_test_lookup.txt");
+            // let substr_def1 =
+            //     SubstrRegexDef::read_from_text("./test_regexes/substr1_test_lookup.txt");
+            // let all_regex_def2 =
+            //     AllstrRegexDef::read_from_text("./test_regexes/regex2_test_lookup.txt");
+            // let substr_def2 =
+            //     SubstrRegexDef::read_from_text("./test_regexes/substr2_test_lookup.txt");
             // let substr_def2 =
             //     SubstrRegexDef::read_from_text("./test_regexes/substr2_test_lookup.txt");
             let gate = FlexGateConfig::<F>::configure(
@@ -883,6 +903,41 @@ mod test {
                 0,
                 K,
             );
+            // let regex_defs = vec![
+            //     RegexDefs {
+            //         allstr: all_regex_def1,
+            //         substrs: vec![substr_def1],
+            //     },
+            //     RegexDefs {
+            //         allstr: all_regex_def2,
+            //         substrs: vec![substr_def2],
+            //     },
+            // ];
+            let config = RegexVerifyConfig::configure(
+                meta,
+                MAX_STRING_LEN,
+                gate,
+                2,
+                Self::FIRST_STATE,
+                Self::DUMMY_STATE,
+            );
+            config
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<F>,
+        ) -> Result<(), Error> {
+            // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+( and (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+)*."
+            let all_regex_def1 =
+                AllstrRegexDef::read_from_text("./test_regexes/regex1_test_lookup.txt");
+            let substr_def1 =
+                SubstrRegexDef::read_from_text("./test_regexes/substr1_test_lookup.txt");
+            let all_regex_def2 =
+                AllstrRegexDef::read_from_text("./test_regexes/regex2_test_lookup.txt");
+            let substr_def2 =
+                SubstrRegexDef::read_from_text("./test_regexes/substr2_test_lookup.txt");
             let regex_defs = vec![
                 RegexDefs {
                     allstr: all_regex_def1,
@@ -893,17 +948,7 @@ mod test {
                     substrs: vec![substr_def2],
                 },
             ];
-            let config = RegexVerifyConfig::configure(meta, MAX_STRING_LEN, gate, regex_defs);
-            config
-        }
-
-        fn synthesize(
-            &self,
-            config: Self::Config,
-            mut layouter: impl Layouter<F>,
-        ) -> Result<(), Error> {
-            // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+( and (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+)*."
-            config.load(&mut layouter)?;
+            config.load(&mut layouter, &regex_defs)?;
 
             // println!("Synthesize being called...");
             let mut first_pass = SKIP_FIRST_PASS;
@@ -929,7 +974,7 @@ mod test {
                         },
                     );
                     let ctx = &mut aux;
-                    let result = config.match_substrs(ctx, &self.characters)?;
+                    let result = config.match_substrs(ctx, &self.characters, &regex_defs)?;
                     let mut expected_masked_chars = vec![0; MAX_STRING_LEN];
                     let mut expected_substr_ids = vec![0; MAX_STRING_LEN];
 
@@ -986,6 +1031,7 @@ mod test {
         // Successful cases
         let circuit = TestCircuit1::<Fr> {
             characters,
+            // regex_defs,
             correct_substrs: vec![(21, "y".to_string()), (33, "x".to_string())],
             _marker: PhantomData,
         };
@@ -1031,6 +1077,7 @@ mod test {
         // Successful cases
         let circuit = TestCircuit1::<Fr> {
             characters,
+            // regex_defs,
             correct_substrs: vec![(21, "yajk".to_string()), (36, "swq".to_string())],
             _marker: PhantomData,
         };
@@ -1075,6 +1122,7 @@ mod test {
         // Successful cases
         let circuit = TestCircuit1::<Fr> {
             characters,
+            // regex_defs,
             correct_substrs: vec![],
             _marker: PhantomData,
         };
@@ -1120,6 +1168,7 @@ mod test {
 
         let circuit = TestCircuit1::<Fr> {
             characters,
+            // regex_defs,
             correct_substrs: vec![(21, "y".to_string()), (33, "x".to_string())],
             _marker: PhantomData,
         };
@@ -1161,6 +1210,7 @@ mod test {
     #[derive(Default, Clone, Debug)]
     struct TestCircuit2<F: PrimeField> {
         characters: Vec<u8>,
+        // regex_defs: Vec<RegexDefs>,
         correct_substrs: Vec<(usize, String)>,
         is_success: bool,
         _marker: PhantomData<F>,
@@ -1169,6 +1219,8 @@ mod test {
     impl<F: PrimeField> TestCircuit2<F> {
         const NUM_ADVICE: usize = 25;
         const NUM_FIXED: usize = 1;
+        const FIRST_STATE: u64 = 0;
+        const DUMMY_STATE: u64 = u64::MAX;
     }
 
     impl<F: PrimeField> Circuit<F> for TestCircuit2<F> {
@@ -1179,6 +1231,7 @@ mod test {
         fn without_witnesses(&self) -> Self {
             Self {
                 characters: vec![],
+                // regex_defs: vec![],
                 correct_substrs: vec![],
                 is_success: false,
                 _marker: PhantomData,
@@ -1186,10 +1239,10 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let all_regex_def =
-                AllstrRegexDef::read_from_text("./test_regexes/regex3_test_lookup.txt");
-            let substr_def =
-                SubstrRegexDef::read_from_text("./test_regexes/substr3_test_lookup.txt");
+            // let all_regex_def =
+            //     AllstrRegexDef::read_from_text("./test_regexes/regex3_test_lookup.txt");
+            // let substr_def =
+            //     SubstrRegexDef::read_from_text("./test_regexes/substr3_test_lookup.txt");
             let gate = FlexGateConfig::<F>::configure(
                 meta,
                 halo2_base::gates::flex_gate::GateStrategy::Vertical,
@@ -1198,11 +1251,18 @@ mod test {
                 0,
                 K,
             );
-            let regex_defs = vec![RegexDefs {
-                allstr: all_regex_def,
-                substrs: vec![substr_def],
-            }];
-            let config = RegexVerifyConfig::configure(meta, MAX_STRING_LEN, gate, regex_defs);
+            // let regex_defs = vec![RegexDefs {
+            //     allstr: all_regex_def,
+            //     substrs: vec![substr_def],
+            // }];
+            let config = RegexVerifyConfig::configure(
+                meta,
+                MAX_STRING_LEN,
+                gate,
+                1,
+                Self::FIRST_STATE,
+                Self::DUMMY_STATE,
+            );
             config
         }
 
@@ -1212,7 +1272,15 @@ mod test {
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
             // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+( and (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+)*."
-            config.load(&mut layouter)?;
+            let all_regex_def =
+                AllstrRegexDef::read_from_text("./test_regexes/regex3_test_lookup.txt");
+            let substr_def =
+                SubstrRegexDef::read_from_text("./test_regexes/substr3_test_lookup.txt");
+            let regex_defs = vec![RegexDefs {
+                allstr: all_regex_def,
+                substrs: vec![substr_def],
+            }];
+            config.load(&mut layouter, &regex_defs)?;
 
             // println!("Synthesize being called...");
             let mut first_pass = SKIP_FIRST_PASS;
@@ -1238,7 +1306,7 @@ mod test {
                         },
                     );
                     let ctx = &mut aux;
-                    let result = config.match_substrs(ctx, &self.characters)?;
+                    let result = config.match_substrs(ctx, &self.characters, &regex_defs)?;
                     let mut expected_masked_chars = vec![0; MAX_STRING_LEN];
                     let mut expected_substr_ids = vec![0; MAX_STRING_LEN];
 
@@ -1289,6 +1357,7 @@ mod test {
         // Successful cases
         let circuit = TestCircuit2::<Fr> {
             characters,
+            // regex_defs,
             correct_substrs: vec![(5, "alice@gmail.com".to_string())],
             is_success: true,
             _marker: PhantomData,
@@ -1326,6 +1395,7 @@ mod test {
         // Successful cases
         let circuit = TestCircuit2::<Fr> {
             characters,
+            // regex_defs,
             correct_substrs: vec![(18, "alice@gmail.com".to_string())],
             is_success: true,
             _marker: PhantomData,
@@ -1363,6 +1433,7 @@ mod test {
         // Successful cases
         let circuit = TestCircuit2::<Fr> {
             characters,
+            // regex_defs,
             correct_substrs: vec![],
             is_success: false,
             _marker: PhantomData,
@@ -1405,6 +1476,7 @@ mod test {
         // Successful cases
         let circuit = TestCircuit2::<Fr> {
             characters,
+            // regex_defs,
             correct_substrs: vec![],
             is_success: false,
             _marker: PhantomData,
@@ -1447,6 +1519,7 @@ mod test {
         // Successful cases
         let circuit = TestCircuit2::<Fr> {
             characters,
+            // regex_defs,
             correct_substrs: vec![],
             is_success: false,
             _marker: PhantomData,
