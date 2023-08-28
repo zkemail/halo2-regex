@@ -902,6 +902,24 @@ mod test {
             config: Self::Config,
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
+            let regex1_decomposed: DecomposedRegexConfig =
+                serde_json::from_reader(File::open("./test_regexes/regex1_test.json").unwrap())
+                    .unwrap();
+            regex1_decomposed
+                .gen_regex_files(
+                    &Path::new("./test_regexes/regex1_test_lookup.txt").to_path_buf(),
+                    &[Path::new("./test_regexes/substr1_test_lookup.txt").to_path_buf()],
+                )
+                .unwrap();
+            let regex2_decomposed: DecomposedRegexConfig =
+                serde_json::from_reader(File::open("./test_regexes/regex2_test.json").unwrap())
+                    .unwrap();
+            regex2_decomposed
+                .gen_regex_files(
+                    &Path::new("./test_regexes/regex2_test_lookup.txt").to_path_buf(),
+                    &[Path::new("./test_regexes/substr2_test_lookup.txt").to_path_buf()],
+                )
+                .unwrap();
             // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+( and (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+)*."
             config.load(&mut layouter)?;
 
@@ -956,24 +974,6 @@ mod test {
 
     #[test]
     fn test_substr_pass1() {
-        let regex1_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex1_test.json").unwrap())
-                .unwrap();
-        regex1_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex1_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr1_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
-        let regex2_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex2_test.json").unwrap())
-                .unwrap();
-        regex2_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex2_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr2_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
         let characters: Vec<u8> = "email was meant for @y. Also for x."
             .chars()
             .map(|c| c as u8)
@@ -1001,24 +1001,6 @@ mod test {
 
     #[test]
     fn test_substr_pass2() {
-        let regex1_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex1_test.json").unwrap())
-                .unwrap();
-        regex1_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex1_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr1_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
-        let regex2_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex2_test.json").unwrap())
-                .unwrap();
-        regex2_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex2_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr2_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
         let characters: Vec<u8> = "email was meant for @yajk. Also for swq."
             .chars()
             .map(|c| c as u8)
@@ -1046,24 +1028,6 @@ mod test {
 
     #[test]
     fn test_substr_fail1() {
-        let regex1_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex1_test.json").unwrap())
-                .unwrap();
-        regex1_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex1_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr1_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
-        let regex2_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex2_test.json").unwrap())
-                .unwrap();
-        regex2_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex2_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr2_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
         // 1. The string does not satisfy the regex.
         let characters: Vec<u8> = "email was meant for @@".chars().map(|c| c as u8).collect();
 
@@ -1095,24 +1059,6 @@ mod test {
 
     #[test]
     fn test_substr_pass1_keygen_and_prove() {
-        let regex1_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex1_test.json").unwrap())
-                .unwrap();
-        regex1_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex1_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr1_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
-        let regex2_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex2_test.json").unwrap())
-                .unwrap();
-        regex2_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex2_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr2_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
         let characters: Vec<u8> = "email was meant for @y. Also for x."
             .chars()
             .map(|c| c as u8)
@@ -1211,6 +1157,15 @@ mod test {
             config: Self::Config,
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
+            let regex_decomposed: DecomposedRegexConfig =
+                serde_json::from_reader(File::open("./test_regexes/regex3_test.json").unwrap())
+                    .unwrap();
+            regex_decomposed
+                .gen_regex_files(
+                    &Path::new("./test_regexes/regex3_test_lookup.txt").to_path_buf(),
+                    &[Path::new("./test_regexes/substr3_test_lookup.txt").to_path_buf()],
+                )
+                .unwrap();
             // test regex: "email was meant for @(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z|A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z|0|1|2|3|4|5|6|7|8|9|_)+( and (a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+)*."
             config.load(&mut layouter)?;
 
@@ -1268,15 +1223,6 @@ mod test {
 
     #[test]
     fn test_substr_pass3() {
-        let regex_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex3_test.json").unwrap())
-                .unwrap();
-        regex_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex3_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr3_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
         let characters: Vec<u8> = "from:alice@gmail.com\r\n"
             .chars()
             .map(|c| c as u8)
@@ -1305,15 +1251,6 @@ mod test {
 
     #[test]
     fn test_substr_pass4() {
-        let regex_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex3_test.json").unwrap())
-                .unwrap();
-        regex_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex3_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr3_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
         let characters: Vec<u8> = "dummy\r\nfrom:alice<alice@gmail.com>\r\n"
             .chars()
             .map(|c| c as u8)
@@ -1342,15 +1279,6 @@ mod test {
 
     #[test]
     fn test_substr_fail2() {
-        let regex_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex3_test.json").unwrap())
-                .unwrap();
-        regex_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex3_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr3_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
         let characters: Vec<u8> = "from:alice<alicegmail.com>\r\n"
             .chars()
             .map(|c| c as u8)
@@ -1384,15 +1312,6 @@ mod test {
 
     #[test]
     fn test_substr_fail3() {
-        let regex_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex3_test.json").unwrap())
-                .unwrap();
-        regex_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex3_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr3_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
         let characters: Vec<u8> = "from:alice<alice@gmail.com>"
             .chars()
             .map(|c| c as u8)
@@ -1426,15 +1345,6 @@ mod test {
 
     #[test]
     fn test_substr_fail4() {
-        let regex_decomposed: DecomposedRegexConfig =
-            serde_json::from_reader(File::open("./test_regexes/regex3_test.json").unwrap())
-                .unwrap();
-        regex_decomposed
-            .gen_regex_files(
-                &Path::new("./test_regexes/regex3_test_lookup.txt").to_path_buf(),
-                &[Path::new("./test_regexes/substr3_test_lookup.txt").to_path_buf()],
-            )
-            .unwrap();
         let characters: Vec<u8> = "fromalice<alice@gmail.com>\r\n"
             .chars()
             .map(|c| c as u8)

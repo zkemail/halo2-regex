@@ -271,15 +271,33 @@ impl DecomposedRegexConfig {
             writer.write_fmt(format_args!("{}\n", &max_size))?;
             writer.write_fmt(format_args!("0\n{}\n", self.max_byte_size - 1))?;
             let mut starts_str = "".to_string();
-            for start in substr_endpoints_array[idx].0.iter() {
+            let starts = substr_endpoints_array[idx]
+                .0
+                .iter()
+                .sorted_by(|a, b| a.cmp(b));
+            for start in starts {
                 starts_str += &format!("{} ", start);
             }
             writer.write_fmt(format_args!("{}\n", starts_str))?;
             let mut ends_str = "".to_string();
-            for end in substr_endpoints_array[idx].1.iter() {
+            let ends = substr_endpoints_array[idx]
+                .1
+                .iter()
+                .sorted_by(|a, b| a.cmp(b));
+            for end in ends {
                 ends_str += &format!("{} ", end);
             }
             writer.write_fmt(format_args!("{}\n", ends_str))?;
+            let mut defs = defs.iter().collect::<Vec<&(usize, usize)>>();
+            defs.sort_by(|a, b| {
+                let start_cmp = a.0.cmp(&b.0);
+                let end_cmp = a.1.cmp(&b.1);
+                if start_cmp == std::cmp::Ordering::Equal {
+                    end_cmp
+                } else {
+                    start_cmp
+                }
+            });
             for (cur, next) in defs.iter() {
                 writer.write_fmt(format_args!("{} {}\n", cur, next))?;
             }
