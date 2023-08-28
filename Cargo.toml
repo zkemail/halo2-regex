@@ -23,9 +23,9 @@ graph-cycles = "0.1.0"
 thiserror = "1.0.40"
 serde_json = "1.0.95"
 serde = { version = "1.0.159", features = ["derive"] }
-js-sandbox = { version = "0.2.0-rc.1", git = "https://github.com/Bromeon/js-sandbox.git" }
+js-sandbox = { version = "0.2.0-rc.1", git = "https://github.com/Bromeon/js-sandbox.git", rev = "cd256ef" }
 itertools = "0.10.3"
-clap = { version = "4.2.1", features = ["derive"] }
+clap = { version = "=4.2.1", features = ["derive"] }
 
 
 [dev-dependencies]
@@ -51,3 +51,7 @@ harness = false
 name = "vrm"
 test = false
 bench = false
+
+[lib]
+name = "halo2_regex"
+path = "src/lib.rs"
