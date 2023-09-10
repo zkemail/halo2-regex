@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::File};
-mod circom;
-mod js_caller;
+pub mod circom;
+pub mod js_caller;
 use crate::vrm::js_caller::*;
 use crate::{AllstrRegexDef, SubstrRegexDef};
 use fancy_regex::Regex;
