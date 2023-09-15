@@ -1,13 +1,16 @@
 function genCircomAllstr(graph_json, template_name) {
     const N = graph_json.length;
     // console.log(JSON.stringify(graph_json));
-    const graph = Array(N).fill({});
-    const rev_graph = Array(N).fill({});
+    // const graph = Array(N).fill({});
+    const rev_graph = [];
+    for (let i = 0; i < N; i++) {
+        rev_graph.push({});
+    }
     let accept_nodes = new Set();
     for (let i = 0; i < N; i++) {
         for (let k in graph_json[i]["edges"]) {
             const v = graph_json[i]["edges"][k];
-            graph[i][k] = v;
+            // graph[i][k] = v;
             rev_graph[v][i] = k;
         }
         if (graph_json[i]["type"] == "accept") {
@@ -36,9 +39,10 @@ function genCircomAllstr(graph_json, template_name) {
     const symbols1 = new Set([":", ";", "<", "=", ">", "?", "@"]);
     const symbols2 = new Set(["[", "\\", "]", "^", "_", "`"]);
     const symbols3 = new Set(["{", "|", "}", "~"]);
+    lines.push(`\t\tstate_changed[i] = MultiOR(${N - 1});`);
     for (let i = 1; i < N; i++) {
         const outputs = [];
-        for (let prev_i in Object.keys(rev_graph[i])) {
+        for (let prev_i of Object.keys(rev_graph[i])) {
             const k = rev_graph[i][prev_i];
             // const prev_i = elem[1];
             const eq_outputs = [];
@@ -237,12 +241,16 @@ function genCircomAllstr(graph_json, template_name) {
             lines.push(`\t\tstates[i+1][${i}] <== multi_or[${multi_or_i}][i].out;`);
             multi_or_i += 1
         }
+        lines.push(`\t\tstate_changed[i].in[${i - 1}] <== states[i+1][${i}];`);
+
         // uppercase = set(string.ascii_uppercase)
         // lowercase = set(string.ascii_lowercase)
         // digits = set(string.digits)
         // vals = set(vals)
     }
+    lines.push(`\t\tstates[i+1][0] <== 1 - state_changed[i].out;`);
     lines.push("\t}");
+
 
     const declarations = [];
     declarations.push(`pragma circom 2.1.5;\ninclude "@zk-email/circuits/regexes/regex_helpers.circom";\n`);
@@ -268,27 +276,34 @@ function genCircomAllstr(graph_json, template_name) {
         declarations.push(`\tcomponent multi_or[${multi_or_i}][num_bytes];`);
     }
     declarations.push(`\tsignal states[num_bytes+1][${N}];`);
+    declarations.push(`\tcomponent state_changed[num_bytes];`);
     declarations.push("");
 
     const init_code = [];
-    init_code.push("\tfor (var i = 0; i < num_bytes; i++) {");
-    init_code.push(`\t\tstates[i][0] <== 1;`);
-    init_code.push("\t}");
+    // init_code.push("\tfor (var i = 0; i < num_bytes; i++) {");
+    // init_code.push(`\t\tstates[i][0] <== 1;`);
+    // init_code.push("\t}");
+    init_code.push(`\tstates[0][0] <== 1;`);
     init_code.push(`\tfor (var i = 1; i < ${N}; i++) {`);
     init_code.push(`\t\tstates[0][i] <== 0;`);
     init_code.push("\t}");
+    // init_code.push(`\tfor (var i = 0; i < ${N}; i++) {`);
+    // init_code.push(`\t\tstate_changed[i] = MultiOR(${N - 1});`);
+    // init_code.push("\t}");
     init_code.push("");
 
     lines = declarations.concat(init_code).concat(lines);
 
     const accept_node = accept_nodes[0];
     const accept_lines = [""];
-    accept_lines.push("\tsignal final_state_sum[num_bytes+1];");
-    accept_lines.push(`\tfinal_state_sum[0] <== states[0][${accept_node}];`);
-    accept_lines.push("\tfor (var i = 1; i <= num_bytes; i++) {");
-    accept_lines.push(`\t\tfinal_state_sum[i] <== final_state_sum[i-1] + states[i][${accept_node}];`);
+    // accept_lines.push("\tsignal final_state_sum[num_bytes+1];");
+    accept_lines.push("\tcomponent final_state_result = MultiOR(num_bytes+1);");
+    // accept_lines.push(`\tfinal_state_sum[0] <== states[0][${accept_node}];`);
+    accept_lines.push("\tfor (var i = 0; i <= num_bytes; i++) {");
+    // accept_lines.push(`\t\tfinal_state_sum[i] <== final_state_sum[i-1] + states[i][${accept_node}];`);
+    accept_lines.push(`\t\tfinal_state_result.in[i] <== states[i][${accept_node}];`);
     accept_lines.push("\t}");
-    accept_lines.push("\tout <== final_state_sum[num_bytes];");
+    accept_lines.push("\tout <== final_state_result.out;");
 
     lines = lines.concat(accept_lines);
     let string = lines.reduce((res, line) => res + line + "\n", "");
