@@ -33,17 +33,23 @@ function genCircomAllstr(graph_json, template_name) {
     let lines = [];
     lines.push("\tfor (var i = 0; i < num_bytes; i++) {");
 
-    const uppercase = new Set("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-    const lowercase = new Set("abcdefghijklmnopqrstuvwxyz");
-    const digits = new Set("0123456789");
-    const symbols1 = new Set([":", ";", "<", "=", ">", "?", "@"]);
-    const symbols2 = new Set(["[", "\\", "]", "^", "_", "`"]);
-    const symbols3 = new Set(["{", "|", "}", "~"]);
+    const uppercase = new Set(Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(c => c.charCodeAt()));
+    const lowercase = new Set(Array.from("abcdefghijklmnopqrstuvwxyz").map(c => c.charCodeAt()));
+    const digits = new Set(Array.from("0123456789").map(c => c.charCodeAt()));
+    const symbols1 = new Set([":", ";", "<", "=", ">", "?", "@"].map(c => c.charCodeAt()));
+    const symbols2 = new Set(["[", "\\", "]", "^", "_", "`"].map(c => c.charCodeAt()));
+    const symbols3 = new Set(["{", "|", "}", "~"].map(c => c.charCodeAt()));
     lines.push(`\t\tstate_changed[i] = MultiOR(${N - 1});`);
     for (let i = 1; i < N; i++) {
         const outputs = [];
         for (let prev_i of Object.keys(rev_graph[i])) {
-            const k = rev_graph[i][prev_i];
+            const k = Array.from(rev_graph[i][prev_i]).map(c => c.charCodeAt());
+            if (prev_i == 0) {
+                const index = k.indexOf(94);
+                if (index != -1) {
+                    k[index] = 128;
+                }
+            }
             // const prev_i = elem[1];
             const eq_outputs = [];
             const vals = new Set(k);
@@ -203,13 +209,13 @@ function genCircomAllstr(graph_json, template_name) {
             //     lt_i += 2
             //     and_i += 1
             // }
-            for (let c of vals) {
-                if (c.length != 1) {
-                    throw new Error("c.length must be 1");
-                }
+            for (let code of vals) {
+                // if (c.length != 1) {
+                //     throw new Error("c.length must be 1");
+                // }
                 lines.push(`\t\teq[${eq_i}][i] = IsEqual();`);
                 lines.push(`\t\teq[${eq_i}][i].in[0] <== in[i];`);
-                lines.push(`\t\teq[${eq_i}][i].in[1] <== ${c.charCodeAt()};`);
+                lines.push(`\t\teq[${eq_i}][i].in[1] <== ${code};`);
                 eq_outputs.push(['eq', eq_i]);
                 eq_i += 1
             }
