@@ -3,20 +3,60 @@ function genCircomAllstr(graph_json, template_name) {
     // console.log(JSON.stringify(graph_json));
     // const graph = Array(N).fill({});
     const rev_graph = [];
+    const to_init_graph = [];
+    // let init_idx = null;
+    let init_going_state = null;
     for (let i = 0; i < N; i++) {
         rev_graph.push({});
+        to_init_graph.push([]);
     }
     let accept_nodes = new Set();
     for (let i = 0; i < N; i++) {
         for (let k in graph_json[i]["edges"]) {
             const v = graph_json[i]["edges"][k];
             // graph[i][k] = v;
-            rev_graph[v][i] = k;
+            rev_graph[v][i] = Array.from(JSON.parse(k)).map(c => c.charCodeAt());
+            if (i == 0) {
+                const index = rev_graph[v][i].indexOf(94);
+                if (index != -1) {
+                    // init_idx = index;
+                    init_going_state = v;
+                    rev_graph[v][i][index] = 128;
+                }
+                for (let j = 0; j < rev_graph[v][i].length; j++) {
+                    if (rev_graph[v][i][j] == 128) {
+                        continue;
+                    }
+                    to_init_graph[v].push(rev_graph[v][i][j]);
+                    // if (init_going_state != null) {
+                    //     to_init_graph.push(rev_graph[v][i][j]);
+                    //     // if (rev_graph[init_going_state][i] == null) {
+                    //     //     rev_graph[init_going_state][i] = [rev_graph[v][i][j]];
+                    //     // } else {
+                    //     //     console.log(rev_graph[init_going_state][i].length);
+                    //     //     rev_graph[init_going_state][i].push(rev_graph[v][i][j]);
+                    //     // }
+                    // }
+                }
+            }
         }
         if (graph_json[i]["type"] == "accept") {
             accept_nodes.add(i);
         }
     }
+    // console.log(init_going_state);
+    // console.log(JSON.stringify(to_init_graph));
+    for (const [going_state, chars] of Object.entries(to_init_graph)) {
+        if (chars.length == 0) {
+            continue;
+        }
+        if (rev_graph[going_state][init_going_state] == null) {
+            rev_graph[going_state][init_going_state] = [];
+        }
+        rev_graph[going_state][init_going_state] = rev_graph[going_state][init_going_state].concat(chars);
+    }
+    // console.log(JSON.stringify(rev_graph));
+
     if (accept_nodes[0] != null) {
         throw new Error("accept node must not be 0");
     }
@@ -40,16 +80,28 @@ function genCircomAllstr(graph_json, template_name) {
     const symbols2 = new Set(["[", "\\", "]", "^", "_", "`"].map(c => c.charCodeAt()));
     const symbols3 = new Set(["{", "|", "}", "~"].map(c => c.charCodeAt()));
     lines.push(`\t\tstate_changed[i] = MultiOR(${N - 1});`);
+    // let init_idx = null;
+    // let init_going_state = null;
     for (let i = 1; i < N; i++) {
         const outputs = [];
         for (let prev_i of Object.keys(rev_graph[i])) {
-            const k = Array.from(rev_graph[i][prev_i]).map(c => c.charCodeAt());
-            if (prev_i == 0) {
-                const index = k.indexOf(94);
-                if (index != -1) {
-                    k[index] = 128;
-                }
-            }
+            const k = rev_graph[i][prev_i];
+            // if (prev_i == 0) {
+            //     const index = k.indexOf(94);
+            //     if (index != -1) {
+            //         init_idx = index;
+            //         init_going_state = i;
+            //         k[init_idx] = 128;
+            //     }
+            //     // for (let j = 0; j < k.length; j++) {
+            //     //     if (j == init_idx) {
+            //     //         continue;
+            //     //     }
+            //     //     if (init_idx != null && init_going_state != null) {
+            //     //         rev_graph[i][init_going_state][j] = k[j];
+            //     //     }
+            //     // }
+            // }
             // const prev_i = elem[1];
             const eq_outputs = [];
             const vals = new Set(k);

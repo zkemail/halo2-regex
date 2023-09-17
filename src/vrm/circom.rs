@@ -21,13 +21,22 @@ impl DecomposedRegexConfig {
             all_regex += &config.regex_def;
         }
         let dfa_val = get_dfa_json_value(&all_regex)?;
+        let accepted_state = get_accepted_state(&dfa_val).ok_or(JsCallerError::NoAcceptedState)?;
         let mut circom = gen_circom_allstr(&dfa_val, template_name)?;
         circom += "\n";
         let (substr_defs_array, _, _) = self.extract_substr_ids(&dfa_val)?;
+        circom += "\tsignal is_consecutive[msg_bytes+1][2];\n";
+        circom += "\tis_consecutive[msg_bytes][1] <== 1;\n";
+        circom += "\tfor (var i = 0; i < msg_bytes; i++) {\n";
+        circom += &format!("\t\tis_consecutive[msg_bytes-1-i][0] <== states[num_bytes-i][{}] * (1 - is_consecutive[msg_bytes-i][1]) + is_consecutive[msg_bytes-i][1];\n",accepted_state);
+        circom += "\t\tis_consecutive[msg_bytes-1-i][1] <== state_changed[msg_bytes-i].out * is_consecutive[msg_bytes-1-i][0];\n";
+        circom += "\t}\n";
+
         for (idx, defs) in substr_defs_array.into_iter().enumerate() {
             // let mut valid_next_states = HashSet::new();
             let num_defs = defs.len();
             circom += &format!("\tsignal is_substr{}[msg_bytes][{}];\n", idx, num_defs + 1);
+            circom += &format!("\tsignal is_reveal{}[msg_bytes];\n", idx);
             circom += &format!("\tsignal output reveal{}[msg_bytes];\n", idx);
             circom += "\tfor (var i = 0; i < msg_bytes; i++) {\n";
             circom += &format!("\t\tis_substr{}[i][0] <== 0;\n", idx);
@@ -48,9 +57,10 @@ impl DecomposedRegexConfig {
                 // }
             }
             circom += &format!(
-                "\t\treveal{}[i] <== in[i+1] * is_substr{}[i][{}];\n",
+                "\t\tis_reveal{}[i] <== is_substr{}[i][{}] * is_consecutive[i][1];\n",
                 idx, idx, num_defs
             );
+            circom += &format!("\t\treveal{}[i] <== in[i+1] * is_reveal{}[i];\n", idx, idx);
             circom += "\t}\n";
         }
         circom += "}";

@@ -86,7 +86,6 @@ function regexToDfa(regex) {
         }
         graph[nodes[i].nature - 1] = curr;
     }
-    // console.log(JSON.stringify(graph));
     return JSON.stringify(graph);
 }
 
