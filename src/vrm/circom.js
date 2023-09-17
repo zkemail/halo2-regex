@@ -46,14 +46,16 @@ function genCircomAllstr(graph_json, template_name) {
     }
     // console.log(init_going_state);
     // console.log(JSON.stringify(to_init_graph));
-    for (const [going_state, chars] of Object.entries(to_init_graph)) {
-        if (chars.length == 0) {
-            continue;
+    if (init_going_state != null) {
+        for (const [going_state, chars] of Object.entries(to_init_graph)) {
+            if (chars.length == 0) {
+                continue;
+            }
+            if (rev_graph[going_state][init_going_state] == null) {
+                rev_graph[going_state][init_going_state] = [];
+            }
+            rev_graph[going_state][init_going_state] = rev_graph[going_state][init_going_state].concat(chars);
         }
-        if (rev_graph[going_state][init_going_state] == null) {
-            rev_graph[going_state][init_going_state] = [];
-        }
-        rev_graph[going_state][init_going_state] = rev_graph[going_state][init_going_state].concat(chars);
     }
     // console.log(JSON.stringify(rev_graph));
 
