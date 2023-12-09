@@ -45,6 +45,7 @@ pub mod defs;
 /// Lookup table for each regex definition.
 pub mod table;
 /// Variable-regex mapping, a helpful tool to generate regex definition files from decomposed regexes.
+#[cfg(feature = "vrm")]
 pub mod vrm;
 use crate::table::RegexTableConfig;
 use crate::{AllstrRegexDef, RegexDefs, SubstrRegexDef};
@@ -69,6 +70,7 @@ use std::{
     io::{BufRead, BufReader},
     marker::PhantomData,
 };
+#[cfg(feature = "vrm")]
 use vrm::DecomposedRegexConfig;
 
 /// Output type definition of [`RegexVerifyConfig`].
@@ -308,20 +310,20 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         let states = self.derive_states(characters);
         let substr_ids = self.derive_substr_ids(states.as_slice());
         let (is_starts, is_ends) = self.derive_is_start_end(&states, &substr_ids);
-        // for d_idx in 0..self.regex_defs.len() {
-        //     for idx in 0..characters.len() {
-        //         println!(
-        //             "d_idx {}, idx {}, char {}, state {}, substr_id {}, is_start {}, is_end {}",
-        //             d_idx,
-        //             idx,
-        //             characters[idx] as char,
-        //             states[d_idx][idx],
-        //             substr_ids[d_idx][idx],
-        //             is_starts[d_idx][idx],
-        //             is_ends[d_idx][idx]
-        //         );
-        //     }
-        // }
+        for d_idx in 0..self.regex_defs.len() {
+            for idx in 0..characters.len() {
+                println!(
+                    "d_idx {}, idx {}, char {}, state {}, substr_id {}, is_start {}, is_end {}",
+                    d_idx,
+                    idx,
+                    characters[idx] as char,
+                    states[d_idx][idx],
+                    substr_ids[d_idx][idx],
+                    is_starts[d_idx][idx],
+                    is_ends[d_idx][idx]
+                );
+            }
+        }
 
         self.q_first.enable(&mut ctx.region, 0)?;
         for idx in 1..self.max_chars_size {
@@ -797,6 +799,7 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
     }
 }
 
+#[cfg(feature = "vrm")]
 #[cfg(test)]
 mod test {
     use halo2_base::halo2_proofs::{

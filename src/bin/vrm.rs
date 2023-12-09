@@ -4,9 +4,11 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
+#[cfg(feature = "vrm")]
 use halo2_regex::vrm::*;
 use itertools::Itertools;
 
+#[cfg(feature = "vrm")]
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -14,6 +16,7 @@ struct Cli {
     pub command: Commands,
 }
 
+#[cfg(feature = "vrm")]
 #[derive(Debug, Subcommand, Clone)]
 enum Commands {
     GenHalo2Texts {
@@ -33,7 +36,7 @@ enum Commands {
         template_name: String,
     },
 }
-
+#[cfg(feature = "vrm")]
 fn main() {
     let cli = Cli::parse();
     match cli.command {
@@ -77,4 +80,9 @@ fn main() {
                 .unwrap();
         }
     }
+}
+
+#[cfg(not(feature = "vrm"))]
+fn main() {
+    panic!("Please enable vrm feature to commands");
 }
