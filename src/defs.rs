@@ -54,6 +54,27 @@ impl AllstrRegexDef {
     pub fn read_from_text(file_path: &str) -> Self {
         let file = File::open(file_path).unwrap();
         let reader = BufReader::new(file);
+        Self::read_from_reader(reader)
+    }
+
+    /// Construct [`AllstrRegexDef`] from a text file of state transitions.
+    ///
+    /// First line: initial state id.
+    ///
+    /// Second line: accepted state id.
+    ///
+    /// Third line: the largest largest state id.
+    ///
+    /// The following lines: "(current state id in DFA) (next state id) (character)" for each line.
+    ///
+    /// # Arguments
+    /// * `reader` - a reader of the text file.
+    ///
+    /// # Return values
+    /// Return a new [`AllstrRegexDef`].
+    pub fn read_from_reader<R: std::io::Read>(reader: BufReader<R>) -> Self {
+        // let file = File::open(file_path).unwrap();
+        // let reader = BufReader::new(file);
         let mut state_lookup = HashMap::<(u8, u64), (usize, u64)>::new();
         // let mut array = Vec::new();
         let mut first_state_val = 0;
@@ -163,6 +184,29 @@ impl SubstrRegexDef {
     pub fn read_from_text(file_path: &str) -> Self {
         let file = File::open(file_path).unwrap();
         let reader = BufReader::new(file);
+        Self::read_from_reader(reader)
+    }
+
+    /// Construct [`SubstrRegexDef`] from a text file to define the substring.
+    ///
+    /// First line: maximum length of the substring.
+    ///
+    /// Second line: a minimum position of the first character in the substring.
+    ///
+    /// Third line: a maximum position of the first character in the substring.
+    ///
+    /// Fourth line: a vector of state ids from which the state ids of the substring start. The ids within a line are separated by spaces.
+    ///
+    /// Fifth line: a vector of state ids to which the state ids of the substring end. The ids within a line are separated by spaces.
+    ///
+    /// The following lines: `(current_state_id, next_state_id)` for each line. The ids within a line are separated by spaces.
+    ///
+    /// # Arguments
+    /// * `reader` - a reader of the text file.
+    ///
+    /// # Return values
+    /// Returns a new [`SubstrRegexDef`].
+    pub fn read_from_reader<R: std::io::Read>(reader: BufReader<R>) -> Self {
         let mut valid_state_transitions = HashSet::<(u64, u64)>::new();
         // let mut one_state_path = HashMap::<u64, u64>::new();
         let mut max_length = 0;
