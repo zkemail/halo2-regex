@@ -28,6 +28,7 @@ serde = { version = "1.0.159", features = ["derive"] }
 js-sandbox = { version = "0.2.0-rc.1", git = "https://github.com/Bromeon/js-sandbox.git", rev = "cd256ef", optional = true }
 itertools = "0.10.3"
 clap = { version = "=4.2.1", features = ["derive"] }
+log = "0.4.17"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }

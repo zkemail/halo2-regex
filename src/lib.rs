@@ -63,6 +63,7 @@ use halo2_base::{
     utils::{bigint_to_fe, biguint_to_fe, fe_to_biguint, modulus, PrimeField},
     AssignedValue, Context, QuantumCell,
 };
+use log::info;
 use std::{
     collections::HashSet,
     fmt::format,
@@ -98,8 +99,10 @@ pub struct RegexVerifyConfig<F: PrimeField> {
     char_enable: Column<Advice>,
     states_array: Vec<Column<Advice>>,
     substr_ids_array: Vec<Column<Advice>>,
-    is_start_array: Vec<Column<Advice>>,
-    is_end_array: Vec<Column<Advice>>,
+    // is_start_array: Vec<Column<Advice>>,
+    // is_end_array: Vec<Column<Advice>>,
+    start_enable_array: Vec<Column<Advice>>,
+    end_enable_array: Vec<Column<Advice>>,
     table_array: Vec<RegexTableConfig<F>>,
     q_first: Selector,
     not_q_first: Selector,
@@ -143,14 +146,16 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                 column
             })
             .collect::<Vec<Column<Advice>>>();
-        let is_start_array = (0..num_regex_def)
+        // let is_start_array = (0..num_regex_def)
+        let start_enable_array = (0..num_regex_def)
             .map(|_| {
                 let column = meta.advice_column();
                 meta.enable_equality(column);
                 column
             })
             .collect::<Vec<Column<Advice>>>();
-        let is_end_array = (0..num_regex_def)
+        // let is_end_array = (0..num_regex_def)
+        let end_enable_array = (0..num_regex_def)
             .map(|_| {
                 let column = meta.advice_column();
                 meta.enable_equality(column);
@@ -228,24 +233,24 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
             });
 
             meta.lookup("lookup start_state of substring", |meta| {
-                let enable = meta.query_advice(char_enable, Rotation::cur());
+                // let enable = meta.query_advice(char_enable, Rotation::cur());
                 let states = states_array[idx];
                 let substr_ids = substr_ids_array[idx];
-                let is_starts = is_start_array[idx];
+                let start_enable = start_enable_array[idx];
                 let cur_state = meta.query_advice(states, Rotation::cur());
                 let substr_id = meta.query_advice(substr_ids, Rotation::cur());
-                let is_start = meta.query_advice(is_starts, Rotation::cur());
+                let start_enable = meta.query_advice(start_enable, Rotation::cur());
                 let dummy_state_val =
                     Expression::Constant(F::from(defs.allstr.largest_state_val + 1));
-                let flag = enable.clone() * is_start.clone();
-                let not_flag = Expression::Constant(F::from(1)) - flag.clone();
+                // let flag = enable.clone() * is_start.clone();
+                let disable = Expression::Constant(F::from(1)) - start_enable.clone();
                 vec![
                     (
-                        flag.clone() * substr_id,
+                        start_enable.clone() * substr_id,
                         table_array[idx].endpoints_substr_ids,
                     ),
                     (
-                        flag * cur_state + not_flag * dummy_state_val.clone(),
+                        start_enable * cur_state + disable * dummy_state_val.clone(),
                         table_array[idx].start_states,
                     ),
                     (dummy_state_val, table_array[idx].end_states),
@@ -253,25 +258,26 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
             });
 
             meta.lookup("lookup end_state of substring", |meta| {
-                let enable = meta.query_advice(char_enable, Rotation::cur());
+                // let enable = meta.query_advice(char_enable, Rotation::cur());
                 let states = states_array[idx];
                 let substr_ids = substr_ids_array[idx];
-                let is_ends = is_end_array[idx];
+                // let is_ends = is_end_array[idx];
+                let end_enable = end_enable_array[idx];
                 let next_state = meta.query_advice(states, Rotation::next());
                 let substr_id = meta.query_advice(substr_ids, Rotation::cur());
-                let next_is_end = meta.query_advice(is_ends, Rotation::next());
+                let end_enable = meta.query_advice(end_enable, Rotation::cur());
                 let dummy_state_val =
                     Expression::Constant(F::from(defs.allstr.largest_state_val + 1));
-                let flag = enable * next_is_end;
-                let not_flag = Expression::Constant(F::from(1)) - flag.clone();
+                // let flag = enable * next_is_end;
+                let disable = Expression::Constant(F::from(1)) - end_enable.clone();
                 vec![
                     (
-                        flag.clone() * substr_id,
+                        end_enable.clone() * substr_id,
                         table_array[idx].endpoints_substr_ids,
                     ),
                     (dummy_state_val.clone(), table_array[idx].start_states),
                     (
-                        flag * next_state + not_flag * dummy_state_val,
+                        end_enable * next_state + disable * dummy_state_val,
                         table_array[idx].end_states,
                     ),
                 ]
@@ -283,8 +289,8 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
             char_enable,
             states_array,
             substr_ids_array,
-            is_start_array,
-            is_end_array,
+            start_enable_array,
+            end_enable_array,
             table_array,
             q_first,
             not_q_first,
@@ -310,20 +316,20 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
         let states = self.derive_states(characters);
         let substr_ids = self.derive_substr_ids(states.as_slice());
         let (is_starts, is_ends) = self.derive_is_start_end(&states, &substr_ids);
-        // for d_idx in 0..self.regex_defs.len() {
-        //     for idx in 0..characters.len() {
-        //         println!(
-        //             "d_idx {}, idx {}, char {}, state {}, substr_id {}, is_start {}, is_end {}",
-        //             d_idx,
-        //             idx,
-        //             characters[idx] as char,
-        //             states[d_idx][idx],
-        //             substr_ids[d_idx][idx],
-        //             is_starts[d_idx][idx],
-        //             is_ends[d_idx][idx]
-        //         );
-        //     }
-        // }
+        for d_idx in 0..self.regex_defs.len() {
+            for idx in 0..characters.len() {
+                info!(
+                    "d_idx {}, idx {}, char {}, state {}, substr_id {}, is_start {}, is_end {}",
+                    d_idx,
+                    idx,
+                    characters[idx] as char,
+                    states[d_idx][idx],
+                    substr_ids[d_idx][idx],
+                    is_starts[d_idx][idx],
+                    is_ends[d_idx][idx]
+                );
+            }
+        }
 
         self.q_first.enable(&mut ctx.region, 0)?;
         for idx in 1..self.max_chars_size {
@@ -464,41 +470,124 @@ impl<F: PrimeField> RegexVerifyConfig<F> {
                     QuantumCell::Existing(&assigned_value),
                 );
             }
-            for (idx, (is_start, is_end)) in is_start_values
-                .into_iter()
-                .zip(is_end_values.into_iter())
-                .enumerate()
-            {
-                {
-                    let assigned_cell = ctx.region.assign_advice(
-                        || format!("is_start at {} of def {}", idx, d_idx),
-                        self.is_start_array[d_idx],
-                        idx,
-                        || is_start,
-                    )?;
-                    let assigned_value = self.assigned_cell2value(ctx, &assigned_cell)?;
-                    assigned_is_start[idx] = gate.add(
-                        ctx,
-                        QuantumCell::Existing(&assigned_is_start[idx]),
-                        QuantumCell::Existing(&assigned_value),
-                    );
-                }
-                {
-                    let assigned_cell = ctx.region.assign_advice(
-                        || format!("is_end at {} of def {}", idx, d_idx),
-                        self.is_end_array[d_idx],
-                        idx,
-                        || is_end,
-                    )?;
-                    let assigned_value = self.assigned_cell2value(ctx, &assigned_cell)?;
-                    assigned_is_end[idx] = gate.add(
-                        ctx,
-                        QuantumCell::Existing(&assigned_is_end[idx]),
-                        QuantumCell::Existing(&assigned_value),
-                    );
-                }
+            for (idx, is_start) in is_start_values.into_iter().enumerate() {
+                info!("is_start at {}: {:?}", idx, is_start);
+                // let assigned_cell = ctx.region.assign_advice(
+                //     || format!("is_start at {} of def {}", idx, d_idx),
+                //     self.is_start_array[d_idx],
+                //     idx,
+                //     || is_start,
+                // )?;
+                // let assigned_value = self.assigned_cell2value(ctx, &assigned_cell)?;
+                let is_start = gate.load_witness(ctx, is_start);
+                let start_enable = gate.mul(
+                    ctx,
+                    QuantumCell::Existing(&assigned_enables[idx]),
+                    QuantumCell::Existing(&is_start),
+                );
+                ctx.region.assign_advice(
+                    || format!("is_start at {} of def {}", idx, d_idx),
+                    self.start_enable_array[d_idx],
+                    idx,
+                    || start_enable.value().map(|v| *v),
+                )?;
+                assigned_is_start[idx] = gate.add(
+                    ctx,
+                    QuantumCell::Existing(&assigned_is_start[idx]),
+                    QuantumCell::Existing(&is_start),
+                );
             }
+
+            for idx in 0..is_end_values.len() - 1 {
+                let is_end = gate.load_witness(ctx, is_end_values[idx + 1]);
+                let end_enable = gate.mul(
+                    ctx,
+                    QuantumCell::Existing(&assigned_enables[idx]),
+                    QuantumCell::Existing(&is_end),
+                );
+                ctx.region.assign_advice(
+                    || format!("is_end at {} of def {}", idx, d_idx),
+                    self.end_enable_array[d_idx],
+                    idx,
+                    || end_enable.value().map(|v| *v),
+                )?;
+                assigned_is_end[idx + 1] = gate.add(
+                    ctx,
+                    QuantumCell::Existing(&assigned_is_end[idx + 1]),
+                    QuantumCell::Existing(&is_end),
+                );
+            }
+
+            // for (idx, is_end) in is_end_values
+            //     .into_iter()
+            //     .zip(is_end_values.into_iter())
+            //     .enumerate()
+            // {
+            //     {
+            //         info!("is_start at {}: {:?}", idx, is_start);
+            //         info!("is_end at {}: {:?}", idx, is_end);
+            //         // let assigned_cell = ctx.region.assign_advice(
+            //         //     || format!("is_start at {} of def {}", idx, d_idx),
+            //         //     self.is_start_array[d_idx],
+            //         //     idx,
+            //         //     || is_start,
+            //         // )?;
+            //         // let assigned_value = self.assigned_cell2value(ctx, &assigned_cell)?;
+            //         let is_start = gate.load_witness(ctx, is_start);
+            //         let start_enable = gate.mul(
+            //             ctx,
+            //             QuantumCell::Existing(&assigned_enables[idx]),
+            //             QuantumCell::Existing(&is_start),
+            //         );
+            //         ctx.region.assign_advice(
+            //             || format!("is_start at {} of def {}", idx, d_idx),
+            //             self.start_enable_array[d_idx],
+            //             idx,
+            //             || start_enable.value().map(|v| *v),
+            //         )?;
+            //         assigned_is_start[idx] = gate.add(
+            //             ctx,
+            //             QuantumCell::Existing(&assigned_is_start[idx]),
+            //             QuantumCell::Existing(&is_start),
+            //         );
+            //     }
+            //     {
+            //         let is_end = gate.load_witness(ctx, is_end);
+            //         let end_enable = gate.mul(
+            //             ctx,
+            //             QuantumCell::Existing(&assigned_enables[idx]),
+            //             QuantumCell::Existing(&id_end),
+            //         );
+
+            //         let assigned_cell = ctx.region.assign_advice(
+            //             || format!("is_end at {} of def {}", idx, d_idx),
+            //             self.is_end_array[d_idx],
+            //             idx,
+            //             || is_end,
+            //         )?;
+            //         let assigned_value = self.assigned_cell2value(ctx, &assigned_cell)?;
+            //         if idx > 0 {
+            //             let end_enable = gate.mul(
+            //                 ctx,
+            //                 QuantumCell::Existing(&assigned_enables[idx - 1]),
+            //                 QuantumCell::Existing(&is_end),
+            //             );
+            //             ctx.region.assign_advice(
+            //                 || format!("is_end at {} of def {}", idx - 1, d_idx),
+            //                 self.end_enable_array[d_idx],
+            //                 idx -,
+            //                 || end_enable.value().map(|v| *v),
+            //             )?;
+            //         }
+            //         assigned_is_end[idx] = gate.add(
+            //             ctx,
+            //             QuantumCell::Existing(&assigned_is_end[idx]),
+            //             QuantumCell::Existing(&is_end),
+            //         );
+            //     }
+            // }
         }
+
         debug_assert_eq!(assigned_enables.len(), assigned_characters.len());
 
         let mut masked_characters = vec![];
